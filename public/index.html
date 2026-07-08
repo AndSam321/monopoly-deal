@@ -56,14 +56,6 @@
     </div>
     <div id="banner" class="hidden"></div>
     <div id="toast" class="hidden"></div>
-    <div id="audio-ctl">
-      <button id="audio-btn" aria-label="Sound settings">🔊</button>
-      <div id="audio-pop" class="hidden">
-        <label>🎵 Music <input id="music-vol" type="range" min="0" max="100"></label>
-        <label>💥 Effects <input id="sfx-vol" type="range" min="0" max="100"></label>
-        <button id="mute-btn">Mute all</button>
-      </div>
-    </div>
     <div id="chat-ctl">
       <button id="chat-btn" aria-label="Chat">💬<span id="chat-badge" class="hidden"></span></button>
     </div>
@@ -82,7 +74,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/motion@12/dist/motion.js"></script>
-  <script src="audio.js"></script>
   <script src="client.js"></script>
 </body>
 </html>

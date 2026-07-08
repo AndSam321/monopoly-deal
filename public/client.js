@@ -93,7 +93,6 @@ $("deck").addEventListener("click", () => {
   if (!(state && state.phase === "draw" && state.turn === myId) || pendingAction) return
   animateDraw({ player: myId, count: me().hand.length === 0 ? 5 : 2 })
   skipNextDrawAnim = true
-  AudioFX.sfx.tick()
   act("draw")
 })
 
@@ -152,7 +151,6 @@ socket.on("state", (s) => {
     const mine = s.players.find((p) => p.id === myId)
     if (mine) mine.hand = s.you.hand
   }
-  AudioFX.startMusic()
   if (s.phase === "lobby") {
     renderLobby()
     show("screen-lobby")
@@ -212,13 +210,20 @@ function cardFace(card, cls = "card") {
     el.innerHTML = `${circle}<div class="r-name">RENT</div><div class="a-text">${text}</div><span class="corner-value">$${card.value}</span>`
   } else {
     el.classList.add("face-action")
-    el.innerHTML = `<div class="icon">${ACTION_ICONS[card.kind] || "⚡"}</div>
+    el.innerHTML = `<div class="action-strip">ACTION</div>
+      <div class="action-badge">${actionIcon(card)}</div>
       <div class="a-name">${card.name}</div><div class="a-text">${card.text}</div>
       <span class="corner-value">$${card.value}</span>`
   }
   const tags = { money: "MONEY", property: "PROPERTY", wild: "WILD", rent: "RENT", action: "ACTION" }
   el.insertAdjacentHTML("beforeend", `<div class="type-tag tag-${card.type}">${tags[card.type]}</div>`)
   return el
+}
+
+function actionIcon(card) {
+  if (card.kind === "passgo") return `<span class="go-mark">GO</span><span class="go-arrow">⟵</span>`
+  if (card.kind === "justsayno") return `<span class="no-mark">NO</span>`
+  return `<span class="badge-emoji">${ACTION_ICONS[card.kind] || "⚡"}</span>`
 }
 
 function propIcon(card) {
@@ -428,6 +433,7 @@ function renderHand() {
       el.addEventListener("click", () => openCardMenu(card))
     } else {
       el.classList.add("disabled")
+      el.addEventListener("click", () => openCardPreview(card))
     }
     hand.appendChild(el)
   })
@@ -703,9 +709,24 @@ function buildDiscardModal(key) {
 
 /* ---------- Playing cards ---------- */
 
+function bigCard(card) {
+  const wrap = document.createElement("div")
+  wrap.className = "card-preview"
+  wrap.appendChild(cardFace(card))
+  return wrap
+}
+
+function openCardPreview(card) {
+  openModal(`preview-${card.uid}`, (modal) => {
+    modal.appendChild(bigCard(card))
+    modalActions(modal, [{ label: "Close", cls: "btn-ghost", onClick: closeModal }])
+  })
+}
+
 function openCardMenu(card) {
   openModal(`menu-${card.uid}`, (modal) => {
-    modal.innerHTML = `<h2>${escapeHtml(card.name || (card.type === "money" ? `$${card.value}` : card.type === "wild" ? "Property Wildcard" : "Rent"))}</h2>`
+    modal.appendChild(bigCard(card))
+    modal.insertAdjacentHTML("beforeend", `<h2>${escapeHtml(card.name || (card.type === "money" ? `$${card.value}` : card.type === "wild" ? "Property Wildcard" : "Rent"))}</h2>`)
     const list = document.createElement("div")
     list.className = "menu-list"
     modal.appendChild(list)
@@ -732,10 +753,10 @@ function openCardMenu(card) {
     if (card.type === "action") {
       switch (card.kind) {
         case "passgo":
-          item("🎲 Pass Go — draw 2 cards", () => { act("play-action", { uid: card.uid, opts: {} }); closeModal() }, card.uid)
+          item("🎲 Pass Go — draw 2 cards", () => { act("play-action", { uid: card.uid, opts: {} }, card.uid); closeModal() })
           break
         case "birthday":
-          item("🎂 It's my birthday — everyone pays $2", () => { act("play-action", { uid: card.uid, opts: {} }); closeModal() }, card.uid)
+          item("🎂 It's my birthday — everyone pays $2", () => { act("play-action", { uid: card.uid, opts: {} }, card.uid); closeModal() })
           break
         case "debtcollector":
           item("💵 Collect a $5 debt…", () => pickOpponent((targetId) => {
@@ -963,54 +984,35 @@ function pickBuildingSet(card) {
 
 /* ---------- Events & animation ---------- */
 
-const ACTION_SOUNDS = {
-  passgo: "arp",
-  birthday: "horn",
-  debtcollector: "coin",
-  slydeal: "whoosh",
-  forceddeal: "whoosh",
-  dealbreaker: "boom"
-}
-
 function runEvents(events, prev) {
   for (const e of events || []) {
     if (e.type === "draw") {
       if (!(e.player === myId && skipNextDrawAnim)) animateDraw(e)
       if (e.player === myId) skipNextDrawAnim = false
-      AudioFX.sfx.tick()
     }
     if (e.type === "play") {
       animatePlay(e)
-      if (e.dest === "bank") AudioFX.sfx.coin()
-      else AudioFX.sfx.thock()
     }
     if (e.type === "action") {
       animatePlay({ ...e, dest: "discard" })
       const text = e.card.type === "rent" ? "RENT!" : BANNER_TEXT[e.card.kind]
       if (text) banner(`${nameOf(e.player)}: ${text}`)
-      const sound = e.card.type === "rent" ? "chaching" : ACTION_SOUNDS[e.card.kind]
-      if (sound) AudioFX.sfx[sound]()
       if (e.card.kind === "dealbreaker") stampFx(`<div class="fx-emoji">💥</div>`, true)
     }
     if (e.type === "jsn") {
       stampFx(`<div class="stop-sign"><span>NO!</span></div>`, true)
-      AudioFX.sfx.no()
     }
     if (e.type === "payment") {
       animateTransfer(e)
       floatMoney(e.to)
-      AudioFX.sfx.chaching()
     }
     if (e.type === "steal") {
       animateTransfer(e)
       streakFx(seatRect(e.from), seatRect(e.to))
-      AudioFX.sfx.whoosh()
     }
-    if (e.type === "turn" && e.player === myId) AudioFX.sfx.chime()
     if (e.type === "chat") {
       renderChat()
       if (e.playerId !== myId) {
-        AudioFX.sfx.tick()
         chatBubble(e.playerId, e.text)
         if ($("chat-panel").classList.contains("hidden")) {
           unreadChat++
@@ -1020,7 +1022,6 @@ function runEvents(events, prev) {
     }
     if (e.type === "win") {
       showWin()
-      AudioFX.sfx.fanfare()
     }
   }
 }
@@ -1148,36 +1149,6 @@ function chatBubble(playerId, text) {
   avatar.appendChild(bubble)
   setTimeout(() => bubble.remove(), 3500)
 }
-
-/* ---------- Sound controls ---------- */
-
-$("audio-btn").addEventListener("click", () => {
-  $("audio-pop").classList.toggle("hidden")
-})
-
-$("music-vol").value = AudioFX.settings.music
-$("sfx-vol").value = AudioFX.settings.sfx
-
-$("music-vol").addEventListener("input", (e) => {
-  AudioFX.setMusic(Number(e.target.value))
-})
-
-$("sfx-vol").addEventListener("input", (e) => {
-  AudioFX.setSfx(Number(e.target.value))
-  AudioFX.sfx.coin()
-})
-
-$("mute-btn").addEventListener("click", () => {
-  AudioFX.toggleMute()
-  updateAudioBtn()
-})
-
-function updateAudioBtn() {
-  $("audio-btn").textContent = AudioFX.settings.muted ? "🔇" : "🔊"
-  $("mute-btn").textContent = AudioFX.settings.muted ? "Unmute" : "Mute all"
-}
-
-updateAudioBtn()
 
 function seatRect(playerId) {
   if (playerId === myId) return $("me").getBoundingClientRect()

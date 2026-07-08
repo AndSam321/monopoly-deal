@@ -45,6 +45,11 @@ io.on("connection", (socket) => {
     if (game) broadcast(game)
   }
 
+  const gameAct = (fn) => act((payload) => {
+    if (!game) throw new Error("Reconnecting — try that again in a second")
+    fn(payload)
+  })
+
   socket.on("create-room", act(({ name }) => {
     game = new Game(newCode())
     games.set(game.code, game)
@@ -77,16 +82,16 @@ io.on("connection", (socket) => {
     }
   })
 
-  socket.on("start-game", act(() => game.start(playerId)))
-  socket.on("draw", act(() => game.turnDraw(playerId)))
-  socket.on("play-bank", act(({ uid }) => game.playToBank(playerId, uid)))
-  socket.on("play-property", act(({ uid, color }) => game.playProperty(playerId, uid, color)))
-  socket.on("play-action", act(({ uid, opts }) => game.playAction(playerId, uid, opts)))
-  socket.on("flip-wild", act(({ uid, color }) => game.flipWild(playerId, uid, color)))
-  socket.on("respond-jsn", act(({ useJsn }) => game.respondJsn(playerId, useJsn)))
-  socket.on("pay", act(({ uids }) => game.submitPayment(playerId, uids)))
-  socket.on("end-turn", act(() => game.endTurn(playerId)))
-  socket.on("discard", act(({ uids }) => game.discardDown(playerId, uids)))
+  socket.on("start-game", gameAct(() => game.start(playerId)))
+  socket.on("draw", gameAct(() => game.turnDraw(playerId)))
+  socket.on("play-bank", gameAct(({ uid }) => game.playToBank(playerId, uid)))
+  socket.on("play-property", gameAct(({ uid, color }) => game.playProperty(playerId, uid, color)))
+  socket.on("play-action", gameAct(({ uid, opts }) => game.playAction(playerId, uid, opts)))
+  socket.on("flip-wild", gameAct(({ uid, color }) => game.flipWild(playerId, uid, color)))
+  socket.on("respond-jsn", gameAct(({ useJsn }) => game.respondJsn(playerId, useJsn)))
+  socket.on("pay", gameAct(({ uids }) => game.submitPayment(playerId, uids)))
+  socket.on("end-turn", gameAct(() => game.endTurn(playerId)))
+  socket.on("discard", gameAct(({ uids }) => game.discardDown(playerId, uids)))
 
   socket.on("disconnect", () => {
     if (!game || !playerId) return

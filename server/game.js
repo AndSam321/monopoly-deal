@@ -25,6 +25,7 @@ class Game {
     this.pending = null
     this.winner = null
     this.log = []
+    this.chat = []
     this.events = []
   }
 
@@ -175,6 +176,7 @@ class Game {
     this.playsLeft--
     this.event({ type: "play", player: playerId, card, dest: "bank" })
     this.addLog(`${player.name} banked $${card.value}`)
+    this.maybeAutoEndTurn()
   }
 
   playProperty(playerId, uid, color) {
@@ -195,6 +197,7 @@ class Game {
     this.event({ type: "play", player: playerId, card, dest: "props", color })
     this.addLog(`${player.name} played ${card.name || "a wildcard"} on ${COLORS[color].label}`)
     this.checkWin(player)
+    this.maybeAutoEndTurn()
   }
 
   assertWildColor(card, color) {
@@ -271,6 +274,7 @@ class Game {
     this.event({ type: "action", player: player.id, card })
     this.event({ type: "draw", player: player.id, count: cards.length })
     this.addLog(`${player.name} played Pass Go`)
+    this.maybeAutoEndTurn()
   }
 
   playRent(player, card, opts) {
@@ -411,6 +415,7 @@ class Game {
     this.playsLeft--
     this.event({ type: "play", player: player.id, card, dest: "props", color })
     this.addLog(`${player.name} added a ${card.kind} to ${COLORS[color].label}`)
+    this.maybeAutoEndTurn()
   }
 
   discardAction(player, card) {
@@ -588,7 +593,27 @@ class Game {
   checkPendingDone() {
     if (this.pending && this.pending.targets.every((t) => t.done)) {
       this.pending = null
+      this.maybeAutoEndTurn()
     }
+  }
+
+  maybeAutoEndTurn() {
+    if (this.phase !== "play" || this.playsLeft > 0 || this.pending || this.winner) return
+    if (this.current.hand.length > HAND_LIMIT) {
+      this.phase = "discard"
+      this.addLog(`${this.current.name} must discard down to ${HAND_LIMIT} cards`)
+    } else {
+      this.addLog(`${this.current.name} is out of plays`)
+      this.advanceTurn()
+    }
+  }
+
+  addChat(player, text) {
+    const clean = String(text || "").trim().slice(0, 140)
+    if (!clean) throw new Error("Type a message first")
+    this.chat.push({ playerId: player.id, name: player.name, text: clean })
+    if (this.chat.length > 50) this.chat.shift()
+    this.event({ type: "chat", playerId: player.id, name: player.name, text: clean })
   }
 
   endTurn(playerId) {
@@ -668,6 +693,7 @@ class Game {
       })),
       pending: this.pending,
       log: this.log.slice(-8),
+      chat: this.chat.slice(-30),
       events: this.events
     }
   }

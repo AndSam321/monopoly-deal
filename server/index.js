@@ -92,6 +92,7 @@ io.on("connection", (socket) => {
   socket.on("pay", gameAct(({ uids }) => game.submitPayment(playerId, uids)))
   socket.on("end-turn", gameAct(() => game.endTurn(playerId)))
   socket.on("discard", gameAct(({ uids }) => game.discardDown(playerId, uids)))
+  socket.on("chat", gameAct(({ text }) => game.addChat(game.player(playerId), text)))
 
   socket.on("disconnect", () => {
     if (!game || !playerId) return

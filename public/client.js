@@ -34,8 +34,22 @@ const BANNER_TEXT = {
   passgo: "PASS GO"
 }
 
-const socket = io()
+const socket = io({ transports: ["websocket", "polling"] })
 const $ = (id) => document.getElementById(id)
+
+let pendingAction = false
+let hiddenUid = null
+let skipNextDrawAnim = false
+
+function act(event, payload = {}, uid = null) {
+  if (pendingAction) return
+  pendingAction = true
+  if (uid) {
+    hiddenUid = uid
+    renderHand()
+  }
+  socket.emit(event, payload)
+}
 
 let state = null
 let myId = null
@@ -74,9 +88,13 @@ function joinRoom() {
 }
 
 $("start-btn").addEventListener("click", () => socket.emit("start-game"))
-$("end-turn-btn").addEventListener("click", () => socket.emit("end-turn"))
+$("end-turn-btn").addEventListener("click", () => act("end-turn"))
 $("deck").addEventListener("click", () => {
-  if (state && state.phase === "draw" && state.turn === myId) socket.emit("draw")
+  if (!(state && state.phase === "draw" && state.turn === myId) || pendingAction) return
+  animateDraw({ player: myId, count: me().hand.length === 0 ? 5 : 2 })
+  skipNextDrawAnim = true
+  AudioFX.sfx.tick()
+  act("draw")
 })
 
 socket.on("joined", ({ code, playerId }) => {
@@ -108,6 +126,8 @@ setInterval(() => {
 let lastStateJson = null
 
 socket.on("game-error", (msg) => {
+  pendingAction = false
+  hiddenUid = null
   if (msg.includes("Room not found") && session) {
     sessionStorage.removeItem("md-session")
     session = null
@@ -120,6 +140,8 @@ socket.on("game-error", (msg) => {
 })
 
 socket.on("state", (s) => {
+  pendingAction = false
+  hiddenUid = null
   const json = JSON.stringify(s)
   if (json === lastStateJson && !(s.events && s.events.length)) return
   lastStateJson = json
@@ -378,13 +400,14 @@ function render() {
   $("end-turn-btn").classList.toggle("hidden", !(state.turn === myId && state.phase === "play" && !state.pending))
 
   renderHand()
+  renderChat()
   syncModals()
 }
 
 function renderHand() {
   const hand = $("my-hand")
   hand.innerHTML = ""
-  const cards = me().hand
+  const cards = me().hand.filter((c) => c.uid !== hiddenUid)
   const canPlay = state.turn === myId && state.phase === "play" && !state.pending && state.playsLeft > 0
   const n = cards.length
   const landscape = window.matchMedia("(max-height: 520px) and (orientation: landscape)").matches
@@ -568,15 +591,15 @@ function buildPendingModal(key) {
         modal.innerHTML = `<h2>${escapeHtml(nameOf(pending.source))} played ${escapeHtml(pending.label)}</h2>
           <p>You have a Just Say No! Cancel it, or let it happen?</p>`
         modalActions(modal, [
-          { label: "Accept it", cls: "btn-ghost", onClick: () => socket.emit("respond-jsn", { useJsn: false }) },
-          { label: "🚫 Just Say No!", onClick: () => socket.emit("respond-jsn", { useJsn: true }) }
+          { label: "Accept it", cls: "btn-ghost", onClick: () => act("respond-jsn", { useJsn: false }) },
+          { label: "🚫 Just Say No!", onClick: () => act("respond-jsn", { useJsn: true }) }
         ])
       } else {
         modal.innerHTML = `<h2>${escapeHtml(nameOf(target.playerId))} said NO!</h2>
           <p>Counter with your own Just Say No to force it through?</p>`
         modalActions(modal, [
-          { label: "Let it go", cls: "btn-ghost", onClick: () => socket.emit("respond-jsn", { useJsn: false }) },
-          { label: "🚫 Counter — Say No!", onClick: () => socket.emit("respond-jsn", { useJsn: true }) }
+          { label: "Let it go", cls: "btn-ghost", onClick: () => act("respond-jsn", { useJsn: false }) },
+          { label: "🚫 Counter — Say No!", onClick: () => act("respond-jsn", { useJsn: true }) }
         ])
       }
     })
@@ -609,7 +632,7 @@ function buildPaymentModal(key, target) {
     }
     modal.appendChild(grid)
     const actions = modalActions(modal, [
-      { label: "Pay", onClick: () => socket.emit("pay", { uids: [...selected] }) }
+      { label: "Pay", onClick: () => act("pay", { uids: [...selected] }) }
     ])
     const payBtn = actions.querySelector("button")
     const totalEl = modal.querySelector(".pay-total")
@@ -672,7 +695,7 @@ function buildDiscardModal(key) {
     }
     modal.appendChild(grid)
     const actions = modalActions(modal, [
-      { label: "Discard", disabled: true, onClick: () => socket.emit("discard", { uids: [...selected] }) }
+      { label: "Discard", disabled: true, onClick: () => act("discard", { uids: [...selected] }) }
     ])
     const btn = actions.querySelector("button")
   })
@@ -695,10 +718,10 @@ function openCardMenu(card) {
     }
 
     if (card.type === "money") {
-      item(`💰 Add $${card.value} to your bank`, () => { socket.emit("play-bank", { uid: card.uid }); closeModal() })
+      item(`💰 Add $${card.value} to your bank`, () => { act("play-bank", { uid: card.uid }, card.uid); closeModal() })
     }
     if (card.type === "property") {
-      item(`🏠 Play ${escapeHtml(card.name)}`, () => { socket.emit("play-property", { uid: card.uid }); closeModal() })
+      item(`🏠 Play ${escapeHtml(card.name)}`, () => { act("play-property", { uid: card.uid }, card.uid); closeModal() })
     }
     if (card.type === "wild") {
       item("🌈 Play as a property…", () => pickWildColor(card))
@@ -709,14 +732,14 @@ function openCardMenu(card) {
     if (card.type === "action") {
       switch (card.kind) {
         case "passgo":
-          item("🎲 Pass Go — draw 2 cards", () => { socket.emit("play-action", { uid: card.uid, opts: {} }); closeModal() })
+          item("🎲 Pass Go — draw 2 cards", () => { act("play-action", { uid: card.uid, opts: {} }); closeModal() }, card.uid)
           break
         case "birthday":
-          item("🎂 It's my birthday — everyone pays $2", () => { socket.emit("play-action", { uid: card.uid, opts: {} }); closeModal() })
+          item("🎂 It's my birthday — everyone pays $2", () => { act("play-action", { uid: card.uid, opts: {} }); closeModal() }, card.uid)
           break
         case "debtcollector":
           item("💵 Collect a $5 debt…", () => pickOpponent((targetId) => {
-            socket.emit("play-action", { uid: card.uid, opts: { targetId } })
+            act("play-action", { uid: card.uid, opts: { targetId } }, card.uid)
             closeModal()
           }))
           break
@@ -742,7 +765,7 @@ function openCardMenu(card) {
       }
     }
     if (card.type !== "property" && card.type !== "wild") {
-      item(`🏦 Bank it as $${card.value}`, () => { socket.emit("play-bank", { uid: card.uid }); closeModal() })
+      item(`🏦 Bank it as $${card.value}`, () => { act("play-bank", { uid: card.uid }, card.uid); closeModal() })
     }
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
   })
@@ -767,7 +790,7 @@ function pickWildColor(card) {
   openModal(`wild-${card.uid}`, (modal) => {
     modal.innerHTML = `<h2>Play wildcard as…</h2>`
     colorGrid(modal, colors, (color) => {
-      socket.emit("play-property", { uid: card.uid, color })
+      act("play-property", { uid: card.uid, color }, card.uid)
       closeModal()
     })
     modalActions(modal, [{ label: "Back", cls: "btn-ghost", onClick: () => openCardMenu(card) }])
@@ -779,7 +802,7 @@ function openWildFlip(card) {
   openModal(`flip-${card.uid}`, (modal) => {
     modal.innerHTML = `<h2>Move wildcard to…</h2><p>Free — doesn't use a play.</p>`
     colorGrid(modal, colors, (color) => {
-      socket.emit("flip-wild", { uid: card.uid, color })
+      act("flip-wild", { uid: card.uid, color })
       closeModal()
     })
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
@@ -800,11 +823,11 @@ function pickRentColor(card) {
       const opts = { color, doubleRentUid: doubled ? dtr.uid : undefined }
       if (card.colors === "any") {
         pickOpponent((targetId) => {
-          socket.emit("play-action", { uid: card.uid, opts: { ...opts, targetId } })
+          act("play-action", { uid: card.uid, opts: { ...opts, targetId } }, card.uid)
           closeModal()
         })
       } else {
-        socket.emit("play-action", { uid: card.uid, opts })
+        act("play-action", { uid: card.uid, opts }, card.uid)
         closeModal()
       }
     })
@@ -864,7 +887,7 @@ function pickOpponentCard(actionCard, isSwap) {
         else el.addEventListener("click", () => {
           if (isSwap) pickMyCardForSwap(actionCard, targetId, card.uid)
           else {
-            socket.emit("play-action", { uid: actionCard.uid, opts: { targetId, cardUid: card.uid } })
+            act("play-action", { uid: actionCard.uid, opts: { targetId, cardUid: card.uid } }, actionCard.uid)
             closeModal()
           }
         })
@@ -886,7 +909,7 @@ function pickMyCardForSwap(actionCard, targetId, theirUid) {
     for (const card of mine) {
       const el = cardFace(card)
       el.addEventListener("click", () => {
-        socket.emit("play-action", { uid: actionCard.uid, opts: { targetId, cardUid: theirUid, myCardUid: card.uid } })
+        act("play-action", { uid: actionCard.uid, opts: { targetId, cardUid: theirUid, myCardUid: card.uid } }, actionCard.uid)
         closeModal()
       })
       grid.appendChild(el)
@@ -906,7 +929,7 @@ function pickDealBreakerSet(actionCard) {
     openModal(`db-${actionCard.uid}`, (modal) => {
       modal.innerHTML = `<h2>Steal which set?</h2>`
       colorGrid(modal, complete, (color) => {
-        socket.emit("play-action", { uid: actionCard.uid, opts: { targetId, color } })
+        act("play-action", { uid: actionCard.uid, opts: { targetId, color } }, actionCard.uid)
         closeModal()
       })
       modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
@@ -931,7 +954,7 @@ function pickBuildingSet(card) {
   openModal(`bldg-${card.uid}`, (modal) => {
     modal.innerHTML = `<h2>Place the ${card.kind} on…</h2>`
     colorGrid(modal, eligible, (color) => {
-      socket.emit("play-action", { uid: card.uid, opts: { color } })
+      act("play-action", { uid: card.uid, opts: { color } }, card.uid)
       closeModal()
     })
     modalActions(modal, [{ label: "Back", cls: "btn-ghost", onClick: () => openCardMenu(card) }])
@@ -952,7 +975,8 @@ const ACTION_SOUNDS = {
 function runEvents(events, prev) {
   for (const e of events || []) {
     if (e.type === "draw") {
-      animateDraw(e)
+      if (!(e.player === myId && skipNextDrawAnim)) animateDraw(e)
+      if (e.player === myId) skipNextDrawAnim = false
       AudioFX.sfx.tick()
     }
     if (e.type === "play") {
@@ -983,6 +1007,17 @@ function runEvents(events, prev) {
       AudioFX.sfx.whoosh()
     }
     if (e.type === "turn" && e.player === myId) AudioFX.sfx.chime()
+    if (e.type === "chat") {
+      renderChat()
+      if (e.playerId !== myId) {
+        AudioFX.sfx.tick()
+        chatBubble(e.playerId, e.text)
+        if ($("chat-panel").classList.contains("hidden")) {
+          unreadChat++
+          updateChatBadge()
+        }
+      }
+    }
     if (e.type === "win") {
       showWin()
       AudioFX.sfx.fanfare()
@@ -1054,6 +1089,66 @@ function floatMoney(playerId) {
   }
 }
 
+/* ---------- Chat ---------- */
+
+let unreadChat = 0
+
+$("chat-btn").addEventListener("click", () => {
+  const panel = $("chat-panel")
+  panel.classList.toggle("hidden")
+  if (!panel.classList.contains("hidden")) {
+    unreadChat = 0
+    updateChatBadge()
+    renderChat()
+    $("chat-input").focus()
+  }
+})
+
+$("chat-form").addEventListener("submit", (e) => {
+  e.preventDefault()
+  const text = $("chat-input").value.trim()
+  if (!text) return
+  socket.emit("chat", { text })
+  $("chat-input").value = ""
+})
+
+function renderChat() {
+  if (!state) return
+  const list = $("chat-messages")
+  list.innerHTML = ""
+  if (!(state.chat || []).length) {
+    list.innerHTML = `<div class="chat-empty">No messages yet — talk some trash 🎩</div>`
+    return
+  }
+  for (const m of state.chat) {
+    const div = document.createElement("div")
+    div.className = "chat-msg" + (m.playerId === myId ? " mine" : "")
+    div.innerHTML = `<span class="chat-name">${escapeHtml(m.name)}</span>${escapeHtml(m.text)}`
+    list.appendChild(div)
+  }
+  list.scrollTop = list.scrollHeight
+}
+
+function updateChatBadge() {
+  const badge = $("chat-badge")
+  badge.classList.toggle("hidden", unreadChat === 0)
+  badge.textContent = unreadChat > 9 ? "9+" : unreadChat
+}
+
+function chatBubble(playerId, text) {
+  const avatar = playerId === myId
+    ? document.querySelector("#my-avatar .avatar")
+    : document.querySelector(`.seat[data-player-id="${playerId}"] .avatar`)
+  if (!avatar) return
+  const old = avatar.querySelector(".chat-bubble")
+  if (old) old.remove()
+  const bubble = document.createElement("div")
+  bubble.className = "chat-bubble"
+  bubble.textContent = text.length > 60 ? text.slice(0, 60) + "…" : text
+  avatar.appendChild(bubble)
+  setTimeout(() => bubble.remove(), 3500)
+}
+
 /* ---------- Sound controls ---------- */
 
 $("audio-btn").addEventListener("click", () => {
@@ -1092,7 +1187,7 @@ function seatRect(playerId) {
 
 const M = window.Motion || null
 
-function fly(fromRect, toRect, el, delay = 0) {
+function fly(fromRect, toRect, el, delay = 0, end = { scale: 0.62, opacity: 0.35 }) {
   el.classList.add("fly-card")
   const startX = fromRect.left + fromRect.width / 2 - 41
   const startY = fromRect.top + fromRect.height / 2 - 58
@@ -1107,28 +1202,29 @@ function fly(fromRect, toRect, el, delay = 0) {
       x: [0, dx],
       y: [0, dy],
       rotate: [0, Math.random() * 16 - 8],
-      scale: [1, 0.62],
-      opacity: [1, 0.35]
-    }, { duration: 0.6, delay: delay / 1000, ease: [0.3, 0.85, 0.3, 1] })
-    setTimeout(() => el.remove(), 750 + delay)
+      scale: [1, end.scale],
+      opacity: [1, end.opacity]
+    }, { duration: 0.55, delay: delay / 1000, ease: [0.3, 0.85, 0.3, 1] })
+    setTimeout(() => el.remove(), 700 + delay)
   } else {
     setTimeout(() => {
       el.style.left = `${startX + dx}px`
       el.style.top = `${startY + dy}px`
-      el.style.transform = "scale(0.6)"
-      el.style.opacity = "0.4"
+      el.style.transform = `scale(${end.scale})`
+      el.style.opacity = String(end.opacity)
     }, 30 + delay)
-    setTimeout(() => el.remove(), 700 + delay)
+    setTimeout(() => el.remove(), 650 + delay)
   }
 }
 
 function animateDraw(e) {
   const deckRect = $("deck").getBoundingClientRect()
-  const toRect = e.player === myId ? $("my-hand").getBoundingClientRect() : seatRect(e.player)
+  const mine = e.player === myId
+  const toRect = mine ? $("my-hand").getBoundingClientRect() : seatRect(e.player)
   for (let i = 0; i < e.count; i++) {
     const back = document.createElement("div")
     back.className = "card card-back"
-    fly(deckRect, toRect, back, i * 90)
+    fly(deckRect, toRect, back, i * 110, mine ? { scale: 1, opacity: 0.85 } : { scale: 0.5, opacity: 0.3 })
   }
 }
 

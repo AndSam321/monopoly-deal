@@ -142,13 +142,13 @@ function cardFace(card, cls = "card") {
   el.className = cls
   if (card.type === "money") {
     el.classList.add("face-money", `money-${card.value}`)
-    el.innerHTML = `<div class="amount">$${card.value}MM</div><div class="hat">🎩</div>`
+    el.innerHTML = `<div class="amount">$${card.value}</div><div class="hat">🎩</div>`
   } else if (card.type === "property") {
     const c = COLORS[card.color]
     el.classList.add("face-prop")
     el.innerHTML = `<div class="bar" style="background:${c.hex}">${propIcon(card)}${card.name}</div>
-      <div class="rents">${c.rent.map((r, i) => `<div><span>${i + 1} card${i ? "s" : ""}</span><span>$${r}MM</span></div>`).join("")}</div>
-      <span class="corner-value">$${card.value}MM</span>`
+      <div class="rents">${c.rent.map((r, i) => `<div><span>${i + 1} card${i ? "s" : ""}</span><span>$${r}</span></div>`).join("")}</div>
+      <span class="corner-value">$${card.value}</span>`
   } else if (card.type === "wild") {
     el.classList.add("face-prop")
     if (card.colors === "any") {
@@ -157,7 +157,7 @@ function cardFace(card, cls = "card") {
       const [a, b] = card.colors
       el.innerHTML = `<div class="bar split"><div style="background:${COLORS[a].hex}"></div><div style="background:${COLORS[b].hex}"></div></div>
         <div class="wild-note">${COLORS[a].label} or ${COLORS[b].label}</div>
-        <span class="corner-value">$${card.value}MM</span>`
+        <span class="corner-value">$${card.value}</span>`
     }
   } else if (card.type === "rent") {
     el.classList.add("face-rent")
@@ -165,12 +165,12 @@ function cardFace(card, cls = "card") {
       ? `<div class="rent-circle rainbow"></div>`
       : `<div class="rent-circle"><div style="background:${COLORS[card.colors[0]].hex}"></div><div style="background:${COLORS[card.colors[1]].hex}"></div></div>`
     const text = card.colors === "any" ? "Charge one player rent on any of your colors" : `${COLORS[card.colors[0]].label} or ${COLORS[card.colors[1]].label}`
-    el.innerHTML = `${circle}<div class="r-name">RENT</div><div class="a-text">${text}</div><span class="corner-value">$${card.value}MM</span>`
+    el.innerHTML = `${circle}<div class="r-name">RENT</div><div class="a-text">${text}</div><span class="corner-value">$${card.value}</span>`
   } else {
     el.classList.add("face-action")
     el.innerHTML = `<div class="icon">${ACTION_ICONS[card.kind] || "⚡"}</div>
       <div class="a-name">${card.name}</div><div class="a-text">${card.text}</div>
-      <span class="corner-value">$${card.value}MM</span>`
+      <span class="corner-value">$${card.value}</span>`
   }
   const tags = { money: "MONEY", property: "PROPERTY", wild: "WILD", rent: "RENT", action: "ACTION" }
   el.insertAdjacentHTML("beforeend", `<div class="type-tag tag-${card.type}">${tags[card.type]}</div>`)
@@ -223,7 +223,7 @@ function bankPile(player) {
     chips.appendChild(chip)
   }
   wrap.appendChild(chips)
-  wrap.insertAdjacentHTML("beforeend", `<div class="bank-total">$${total}MM</div>`)
+  wrap.insertAdjacentHTML("beforeend", `<div class="bank-total">$${total}</div>`)
   return wrap
 }
 
@@ -537,7 +537,7 @@ function buildPaymentModal(key, target) {
   for (const pile of Object.values(my.props)) tableCards.push(...pile.cards, ...pile.buildings)
   const selected = new Set(suggestPayment(target.amount, my.bank, tableCards.filter((c) => !my.bank.includes(c))))
   openModal(key, (modal) => {
-    modal.innerHTML = `<h2>Pay ${escapeHtml(nameOf(state.pending.source))} $${target.amount}MM</h2>
+    modal.innerHTML = `<h2>Pay ${escapeHtml(nameOf(state.pending.source))} $${target.amount}</h2>
       <p>${escapeHtml(state.pending.label)} — pick cards from your bank and properties. No change given!</p>
       <div class="pay-total"></div>`
     const grid = document.createElement("div")
@@ -563,9 +563,9 @@ function buildPaymentModal(key, target) {
       const total = tableCards.filter((c) => selected.has(c.uid)).reduce((s, c) => s + c.value, 0)
       const allSelected = selected.size === tableCards.length
       const enough = total >= target.amount || allSelected
-      totalEl.innerHTML = `Selected: <span class="${enough ? "ok" : "short"}">$${total}MM</span> of $${target.amount}MM`
+      totalEl.innerHTML = `Selected: <span class="${enough ? "ok" : "short"}">$${total}</span> of $${target.amount}`
       payBtn.disabled = !enough
-      payBtn.textContent = allSelected && total < target.amount ? "Pay everything" : `Pay $${total}MM`
+      payBtn.textContent = allSelected && total < target.amount ? "Pay everything" : `Pay $${total}`
     }
     update()
   })
@@ -628,7 +628,7 @@ function buildDiscardModal(key) {
 
 function openCardMenu(card) {
   openModal(`menu-${card.uid}`, (modal) => {
-    modal.innerHTML = `<h2>${escapeHtml(card.name || (card.type === "money" ? `$${card.value}MM` : card.type === "wild" ? "Property Wildcard" : "Rent"))}</h2>`
+    modal.innerHTML = `<h2>${escapeHtml(card.name || (card.type === "money" ? `$${card.value}` : card.type === "wild" ? "Property Wildcard" : "Rent"))}</h2>`
     const list = document.createElement("div")
     list.className = "menu-list"
     modal.appendChild(list)
@@ -641,7 +641,7 @@ function openCardMenu(card) {
     }
 
     if (card.type === "money") {
-      item(`💰 Add $${card.value}MM to your bank`, () => { socket.emit("play-bank", { uid: card.uid }); closeModal() })
+      item(`💰 Add $${card.value} to your bank`, () => { socket.emit("play-bank", { uid: card.uid }); closeModal() })
     }
     if (card.type === "property") {
       item(`🏠 Play ${escapeHtml(card.name)}`, () => { socket.emit("play-property", { uid: card.uid }); closeModal() })
@@ -658,10 +658,10 @@ function openCardMenu(card) {
           item("🎲 Pass Go — draw 2 cards", () => { socket.emit("play-action", { uid: card.uid, opts: {} }); closeModal() })
           break
         case "birthday":
-          item("🎂 It's my birthday — everyone pays $2MM", () => { socket.emit("play-action", { uid: card.uid, opts: {} }); closeModal() })
+          item("🎂 It's my birthday — everyone pays $2", () => { socket.emit("play-action", { uid: card.uid, opts: {} }); closeModal() })
           break
         case "debtcollector":
-          item("💵 Collect a $5MM debt…", () => pickOpponent((targetId) => {
+          item("💵 Collect a $5 debt…", () => pickOpponent((targetId) => {
             socket.emit("play-action", { uid: card.uid, opts: { targetId } })
             closeModal()
           }))
@@ -688,7 +688,7 @@ function openCardMenu(card) {
       }
     }
     if (card.type !== "property" && card.type !== "wild") {
-      item(`🏦 Bank it as $${card.value}MM`, () => { socket.emit("play-bank", { uid: card.uid }); closeModal() })
+      item(`🏦 Bank it as $${card.value}`, () => { socket.emit("play-bank", { uid: card.uid }); closeModal() })
     }
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
   })

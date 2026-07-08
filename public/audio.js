@@ -35,15 +35,34 @@ const AudioFX = (() => {
 
   function apply() {
     if (!ctx) return
-    musicBus.gain.value = (settings.music / 100) * 0.55
+    musicBus.gain.value = (settings.music / 100) * 0.8
     sfxBus.gain.value = (settings.sfx / 100) * 0.9
     master.gain.value = settings.muted ? 0 : 1
   }
 
+  const SILENT_WAV = "data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA=="
+  let mediaKick = null
+
+  function kickMediaSession() {
+    if (mediaKick) return
+    mediaKick = new Audio(SILENT_WAV)
+    mediaKick.loop = true
+    mediaKick.volume = 0.01
+    const attempt = mediaKick.play()
+    if (attempt) attempt.catch(() => { mediaKick = null })
+  }
+
+  function maybeStartLoop() {
+    if (musicWanted && !musicTimer && ctx && ctx.state === "running") beginLoop()
+  }
+
   function unlock() {
     if (!ensure()) return
-    if (ctx.state === "suspended") ctx.resume()
-    if (musicWanted && !musicTimer && ctx.state !== "closed") beginLoop()
+    kickMediaSession()
+    if (ctx.state === "suspended") {
+      ctx.resume().then(maybeStartLoop).catch(() => {})
+    }
+    maybeStartLoop()
   }
 
   document.addEventListener("pointerdown", unlock)
@@ -102,11 +121,11 @@ const AudioFX = (() => {
       if (ctx.state !== "running") return
       const t = ctx.currentTime + 0.15
       const chord = CHORDS[bar % CHORDS.length]
-      for (const f of chord) tone(musicBus, "triangle", f, t, 1.5, 0.05, BAR_SECONDS)
-      tone(musicBus, "sine", chord[0] / 2, t, 0.5, 0.09, BAR_SECONDS)
+      for (const f of chord) tone(musicBus, "triangle", f, t, 1.5, 0.09, BAR_SECONDS)
+      tone(musicBus, "sine", chord[0] / 2, t, 0.5, 0.15, BAR_SECONDS)
       if (bar % 2 === 1) {
         const note = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)]
-        tone(musicBus, "sine", note, t + 0.8 + Math.random() * 1.4, 0.02, 0.05, 1.8)
+        tone(musicBus, "sine", note, t + 0.8 + Math.random() * 1.4, 0.02, 0.08, 1.8)
       }
       bar++
     }
@@ -191,6 +210,31 @@ const AudioFX = (() => {
   return {
     settings,
     sfx,
+    debug() {
+      return {
+        ctxState: ctx ? ctx.state : "no-context",
+        musicWanted,
+        loopRunning: !!musicTimer,
+        musicGain: musicBus ? musicBus.gain.value : null,
+        masterGain: master ? master.gain.value : null
+      }
+    },
+    meter() {
+      if (!ctx || !master) return Promise.resolve(-1)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      master.connect(analyser)
+      const data = new Float32Array(analyser.fftSize)
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          analyser.getFloatTimeDomainData(data)
+          master.disconnect(analyser)
+          let sum = 0
+          for (const v of data) sum += v * v
+          resolve(Math.sqrt(sum / data.length))
+        }, 400)
+      })
+    },
     startMusic() {
       musicWanted = true
       unlock()

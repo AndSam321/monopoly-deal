@@ -792,28 +792,59 @@ function openCardMenu(card) {
   })
 }
 
-function colorGrid(modal, colors, onPick) {
+function colorGrid(modal, colors, onPick, labelFor = (c) => COLORS[c].label) {
   const grid = document.createElement("div")
   grid.className = "color-grid"
   for (const color of colors) {
     const sw = document.createElement("button")
     sw.className = "color-swatch"
+    sw.dataset.color = color
     sw.style.background = COLORS[color].hex
-    sw.textContent = COLORS[color].label
+    sw.textContent = labelFor(color)
     sw.addEventListener("click", () => onPick(color))
     grid.appendChild(sw)
   }
   modal.appendChild(grid)
+  return grid
+}
+
+function rentFor(player, color) {
+  const pile = player.props[color]
+  if (!pile || !pile.cards.length) return 0
+  const info = COLORS[color]
+  const n = Math.min(pile.cards.length, info.size)
+  let rent = info.rent[n - 1]
+  if (pile.cards.length >= info.size) {
+    rent += pile.buildings.reduce((sum, b) => sum + (b.kind === "house" ? 3 : 4), 0)
+  }
+  return rent
+}
+
+function ownedLabel(player, color) {
+  const pile = player.props[color]
+  const count = pile ? pile.cards.length : 0
+  return count ? `${COLORS[color].label} ${count}/${COLORS[color].size}` : COLORS[color].label
 }
 
 function pickWildColor(card) {
-  const colors = card.colors === "any" ? Object.keys(COLORS) : card.colors
+  const my = me()
+  let colors = card.colors === "any" ? Object.keys(COLORS) : card.colors
+  let note = ""
+  if (card.colors === "any") {
+    const owned = colors.filter((c) => my.props[c] && my.props[c].cards.length)
+    if (owned.length) {
+      colors = owned
+      note = `<p>Showing the colors you already own — you can move it later for free.</p>`
+    } else {
+      note = `<p>You don't own any properties yet, so pick any color to start a set.</p>`
+    }
+  }
   openModal(`wild-${card.uid}`, (modal) => {
-    modal.innerHTML = `<h2>Play wildcard as…</h2>`
+    modal.innerHTML = `<h2>Play wildcard as…</h2>${note}`
     colorGrid(modal, colors, (color) => {
       act("play-property", { uid: card.uid, color }, card.uid)
       closeModal()
-    })
+    }, (c) => ownedLabel(my, c))
     modalActions(modal, [{ label: "Back", cls: "btn-ghost", onClick: () => openCardMenu(card) }])
   })
 }
@@ -825,7 +856,7 @@ function openWildFlip(card) {
     colorGrid(modal, colors, (color) => {
       act("flip-wild", { uid: card.uid, color })
       closeModal()
-    })
+    }, (c) => ownedLabel(me(), c))
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
   })
 }
@@ -840,7 +871,8 @@ function pickRentColor(card) {
   openModal(`rent-${card.uid}`, (modal) => {
     modal.innerHTML = `<h2>Charge rent on…</h2>`
     let doubled = false
-    colorGrid(modal, options, (color) => {
+    const rentLabel = (c) => `${COLORS[c].label} — $${rentFor(my, c) * (doubled ? 2 : 1)}`
+    const grid = colorGrid(modal, options, (color) => {
       const opts = { color, doubleRentUid: doubled ? dtr.uid : undefined }
       if (card.colors === "any") {
         pickOpponent((targetId) => {
@@ -851,12 +883,17 @@ function pickRentColor(card) {
         act("play-action", { uid: card.uid, opts }, card.uid)
         closeModal()
       }
-    })
+    }, rentLabel)
     if (canDouble) {
       const row = document.createElement("label")
       row.className = "dtr-row"
       row.innerHTML = `<input type="checkbox"> ✖️2 Double the Rent (uses 2 plays)`
-      row.querySelector("input").addEventListener("change", (e) => { doubled = e.target.checked })
+      row.querySelector("input").addEventListener("change", (e) => {
+        doubled = e.target.checked
+        for (const sw of grid.querySelectorAll(".color-swatch")) {
+          sw.textContent = rentLabel(sw.dataset.color)
+        }
+      })
       modal.appendChild(row)
     }
     modalActions(modal, [{ label: "Back", cls: "btn-ghost", onClick: () => openCardMenu(card) }])

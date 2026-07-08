@@ -40,15 +40,27 @@ const $ = (id) => document.getElementById(id)
 let pendingAction = false
 let hiddenUid = null
 let skipNextDrawAnim = false
+let actionSeq = 0
 
 function act(event, payload = {}, uid = null) {
   if (pendingAction) return
   pendingAction = true
+  const seq = ++actionSeq
   if (uid) {
     hiddenUid = uid
     renderHand()
   }
-  socket.emit(event, payload)
+  socket.timeout(4000).emit(event, payload, (err) => {
+    if (err && seq === actionSeq && pendingAction) {
+      pendingAction = false
+      hiddenUid = null
+      renderHand()
+      toast("Connection hiccup — tap that again")
+    }
+  })
+  setTimeout(() => {
+    if (seq === actionSeq && pendingAction) pendingAction = false
+  }, 2500)
 }
 
 let state = null
@@ -1049,13 +1061,7 @@ function runEvents(events, prev) {
     }
     if (e.type === "chat") {
       renderChat()
-      if (e.playerId !== myId) {
-        chatBubble(e.playerId, e.text)
-        if ($("chat-panel").classList.contains("hidden")) {
-          unreadChat++
-          updateChatBadge()
-        }
-      }
+      if (e.playerId !== myId) chatBubble(e.playerId, e.text)
     }
     if (e.type === "win") {
       showWin()
@@ -1129,14 +1135,12 @@ function floatMoney(playerId) {
 
 /* ---------- Chat ---------- */
 
-let unreadChat = 0
+let chatSeen = -1
 
 $("chat-btn").addEventListener("click", () => {
   const panel = $("chat-panel")
   panel.classList.toggle("hidden")
   if (!panel.classList.contains("hidden")) {
-    unreadChat = 0
-    updateChatBadge()
     renderChat()
     $("chat-input").focus()
   }
@@ -1147,18 +1151,27 @@ $("chat-form").addEventListener("submit", (e) => {
   const text = $("chat-input").value.trim()
   if (!text) return
   socket.emit("chat", { text })
+  if (state && state.chat) {
+    state.chat.push({ playerId: myId, name: me().name, text })
+    renderChat()
+  }
   $("chat-input").value = ""
 })
 
 function renderChat() {
   if (!state) return
+  const msgs = state.chat || []
+  if (chatSeen < 0) chatSeen = msgs.length
+  const panelOpen = !$("chat-panel").classList.contains("hidden")
+  if (panelOpen) chatSeen = msgs.length
+  updateChatBadge(Math.max(0, msgs.length - chatSeen))
   const list = $("chat-messages")
   list.innerHTML = ""
-  if (!(state.chat || []).length) {
+  if (!msgs.length) {
     list.innerHTML = `<div class="chat-empty">No messages yet — talk some trash 🎩</div>`
     return
   }
-  for (const m of state.chat) {
+  for (const m of msgs) {
     const div = document.createElement("div")
     div.className = "chat-msg" + (m.playerId === myId ? " mine" : "")
     div.innerHTML = `<span class="chat-name">${escapeHtml(m.name)}</span>${escapeHtml(m.text)}`
@@ -1167,10 +1180,10 @@ function renderChat() {
   list.scrollTop = list.scrollHeight
 }
 
-function updateChatBadge() {
+function updateChatBadge(unread) {
   const badge = $("chat-badge")
-  badge.classList.toggle("hidden", unreadChat === 0)
-  badge.textContent = unreadChat > 9 ? "9+" : unreadChat
+  badge.classList.toggle("hidden", unread === 0)
+  badge.textContent = unread > 9 ? "9+" : unread
 }
 
 function chatBubble(playerId, text) {

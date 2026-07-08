@@ -36,11 +36,13 @@ io.on("connection", (socket) => {
   let game = null
   let playerId = null
 
-  const act = (fn) => (payload = {}) => {
+  const act = (fn) => (payload = {}, ack) => {
     try {
       fn(payload)
+      if (typeof ack === "function") ack(true)
     } catch (err) {
       socket.emit("game-error", err.message)
+      if (typeof ack === "function") ack(false)
     }
     if (game) broadcast(game)
   }

@@ -109,6 +109,7 @@ socket.on("state", (s) => {
     const mine = s.players.find((p) => p.id === myId)
     if (mine) mine.hand = s.you.hand
   }
+  AudioFX.startMusic()
   if (s.phase === "lobby") {
     renderLobby()
     show("screen-lobby")
@@ -886,20 +887,149 @@ function pickBuildingSet(card) {
 
 /* ---------- Events & animation ---------- */
 
+const ACTION_SOUNDS = {
+  passgo: "arp",
+  birthday: "horn",
+  debtcollector: "coin",
+  slydeal: "whoosh",
+  forceddeal: "whoosh",
+  dealbreaker: "boom"
+}
+
 function runEvents(events, prev) {
   for (const e of events || []) {
-    if (e.type === "draw") animateDraw(e)
-    if (e.type === "play") animatePlay(e)
+    if (e.type === "draw") {
+      animateDraw(e)
+      AudioFX.sfx.tick()
+    }
+    if (e.type === "play") {
+      animatePlay(e)
+      if (e.dest === "bank") AudioFX.sfx.coin()
+      else AudioFX.sfx.thock()
+    }
     if (e.type === "action") {
       animatePlay({ ...e, dest: "discard" })
       const text = e.card.type === "rent" ? "RENT!" : BANNER_TEXT[e.card.kind]
       if (text) banner(`${nameOf(e.player)}: ${text}`)
+      const sound = e.card.type === "rent" ? "chaching" : ACTION_SOUNDS[e.card.kind]
+      if (sound) AudioFX.sfx[sound]()
+      if (e.card.kind === "dealbreaker") stampFx(`<div class="fx-emoji">💥</div>`, true)
     }
-    if (e.type === "jsn") banner(`${nameOf(e.player)}: JUST SAY NO! 🚫`)
-    if (e.type === "payment" || e.type === "steal") animateTransfer(e)
-    if (e.type === "win") showWin()
+    if (e.type === "jsn") {
+      stampFx(`<div class="stop-sign"><span>NO!</span></div>`, true)
+      AudioFX.sfx.no()
+    }
+    if (e.type === "payment") {
+      animateTransfer(e)
+      floatMoney(e.to)
+      AudioFX.sfx.chaching()
+    }
+    if (e.type === "steal") {
+      animateTransfer(e)
+      streakFx(seatRect(e.from), seatRect(e.to))
+      AudioFX.sfx.whoosh()
+    }
+    if (e.type === "turn" && e.player === myId) AudioFX.sfx.chime()
+    if (e.type === "win") {
+      showWin()
+      AudioFX.sfx.fanfare()
+    }
   }
 }
+
+function fxLayer() {
+  let layer = $("fx-layer")
+  if (!layer) {
+    layer = document.createElement("div")
+    layer.id = "fx-layer"
+    document.body.appendChild(layer)
+  }
+  return layer
+}
+
+function stampFx(html, shake) {
+  const el = document.createElement("div")
+  el.className = "fx-stamp"
+  el.innerHTML = html
+  if (M) {
+    el.classList.add("motion")
+    fxLayer().appendChild(el)
+    const inner = el.firstElementChild
+    inner.style.opacity = "0"
+    M.animate(inner, { opacity: [0, 1], scale: [2.6, 1], rotate: [-24, -8] }, { type: "spring", bounce: 0.55, visualDuration: 0.32 })
+    setTimeout(() => {
+      M.animate(inner, { opacity: 0, y: -16 }, { duration: 0.3 })
+      setTimeout(() => el.remove(), 350)
+    }, 950)
+  } else {
+    fxLayer().appendChild(el)
+    setTimeout(() => el.remove(), 1400)
+  }
+  if (shake && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const game = $("screen-game")
+    game.classList.add("fx-shake")
+    setTimeout(() => game.classList.remove("fx-shake"), 500)
+  }
+}
+
+function streakFx(fromRect, toRect) {
+  const x1 = fromRect.left + fromRect.width / 2
+  const y1 = fromRect.top + fromRect.height / 2
+  const x2 = toRect.left + toRect.width / 2
+  const y2 = toRect.top + toRect.height / 2
+  const el = document.createElement("div")
+  el.className = "fx-streak"
+  el.style.left = `${x1}px`
+  el.style.top = `${y1}px`
+  el.style.width = `${Math.hypot(x2 - x1, y2 - y1)}px`
+  el.style.transform = `rotate(${Math.atan2(y2 - y1, x2 - x1)}rad)`
+  fxLayer().appendChild(el)
+  setTimeout(() => el.remove(), 600)
+}
+
+function floatMoney(playerId) {
+  const rect = seatRect(playerId)
+  for (let i = 0; i < 5; i++) {
+    const el = document.createElement("div")
+    el.className = "fx-money"
+    el.textContent = "$"
+    el.style.left = `${rect.left + rect.width * (0.25 + Math.random() * 0.5)}px`
+    el.style.top = `${rect.top + rect.height * (0.3 + Math.random() * 0.4)}px`
+    el.style.animationDelay = `${i * 0.09}s`
+    fxLayer().appendChild(el)
+    setTimeout(() => el.remove(), 1600)
+  }
+}
+
+/* ---------- Sound controls ---------- */
+
+$("audio-btn").addEventListener("click", () => {
+  $("audio-pop").classList.toggle("hidden")
+})
+
+$("music-vol").value = AudioFX.settings.music
+$("sfx-vol").value = AudioFX.settings.sfx
+
+$("music-vol").addEventListener("input", (e) => {
+  AudioFX.setMusic(Number(e.target.value))
+})
+
+$("sfx-vol").addEventListener("input", (e) => {
+  AudioFX.setSfx(Number(e.target.value))
+  AudioFX.sfx.coin()
+})
+
+$("mute-btn").addEventListener("click", () => {
+  AudioFX.toggleMute()
+  updateAudioBtn()
+})
+
+function updateAudioBtn() {
+  $("audio-btn").textContent = AudioFX.settings.muted ? "🔇" : "🔊"
+  $("mute-btn").textContent = AudioFX.settings.muted ? "Unmute" : "Mute all"
+}
+
+updateAudioBtn()
 
 function seatRect(playerId) {
   if (playerId === myId) return $("me").getBoundingClientRect()
@@ -907,18 +1037,36 @@ function seatRect(playerId) {
   return (seat || $("opponents")).getBoundingClientRect()
 }
 
+const M = window.Motion || null
+
 function fly(fromRect, toRect, el, delay = 0) {
   el.classList.add("fly-card")
-  el.style.left = `${fromRect.left + fromRect.width / 2 - 41}px`
-  el.style.top = `${fromRect.top + fromRect.height / 2 - 58}px`
+  const startX = fromRect.left + fromRect.width / 2 - 41
+  const startY = fromRect.top + fromRect.height / 2 - 58
+  el.style.left = `${startX}px`
+  el.style.top = `${startY}px`
   document.body.appendChild(el)
-  setTimeout(() => {
-    el.style.left = `${toRect.left + toRect.width / 2 - 41}px`
-    el.style.top = `${toRect.top + toRect.height / 2 - 58}px`
-    el.style.transform = "scale(0.6)"
-    el.style.opacity = "0.4"
-  }, 30 + delay)
-  setTimeout(() => el.remove(), 700 + delay)
+  const dx = toRect.left + toRect.width / 2 - 41 - startX
+  const dy = toRect.top + toRect.height / 2 - 58 - startY
+  if (M) {
+    el.style.transition = "none"
+    M.animate(el, {
+      x: [0, dx],
+      y: [0, dy],
+      rotate: [0, Math.random() * 16 - 8],
+      scale: [1, 0.62],
+      opacity: [1, 0.35]
+    }, { duration: 0.6, delay: delay / 1000, ease: [0.3, 0.85, 0.3, 1] })
+    setTimeout(() => el.remove(), 750 + delay)
+  } else {
+    setTimeout(() => {
+      el.style.left = `${startX + dx}px`
+      el.style.top = `${startY + dy}px`
+      el.style.transform = "scale(0.6)"
+      el.style.opacity = "0.4"
+    }, 30 + delay)
+    setTimeout(() => el.remove(), 700 + delay)
+  }
 }
 
 function animateDraw(e) {
@@ -973,6 +1121,12 @@ function showWin() {
   const splash = document.createElement("div")
   splash.id = "win-splash"
   splash.innerHTML = `<h1>${escapeHtml(winner)} WINS! 🏆</h1>`
+  if (M) {
+    const h1 = splash.querySelector("h1")
+    h1.style.animation = "none"
+    h1.style.scale = "0.3"
+    setTimeout(() => M.animate(h1, { scale: 1 }, { type: "spring", bounce: 0.55, visualDuration: 0.6 }), 30)
+  }
   const again = document.createElement("button")
   again.className = "btn btn-red"
   again.style.width = "auto"

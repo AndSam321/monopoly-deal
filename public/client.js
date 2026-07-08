@@ -230,6 +230,36 @@ function smallPropCard(card) {
 function me() { return state.players.find((p) => p.id === myId) }
 function opponents() { return state.players.filter((p) => p.id !== myId) }
 
+const TOKENS = ["🎩", "🐕", "🚗", "👢", "🚢", "🐈"]
+
+function avatarEl(player) {
+  const idx = state.players.findIndex((p) => p.id === player.id)
+  const av = document.createElement("div")
+  av.className = "avatar" + (state.turn === player.id && !state.winner ? " glow" : "")
+  av.innerHTML = `<div class="token">${TOKENS[idx % TOKENS.length]}</div>
+    <div class="av-name">${escapeHtml(player.name)}</div>
+    <div class="av-sets">${completedSetCount(player)}/3</div>
+    ${player.connected ? "" : '<div class="av-off">!</div>'}`
+  return av
+}
+
+function fanOfBacks(count) {
+  const fan = document.createElement("div")
+  fan.className = "opp-fan"
+  const n = Math.min(count, 9)
+  const mid = (n - 1) / 2
+  for (let i = 0; i < n; i++) {
+    const back = document.createElement("div")
+    back.className = "fan-back"
+    back.style.transform = `rotate(${(i - mid) * 7}deg) translateY(${Math.abs(i - mid) * 3}px)`
+    fan.appendChild(back)
+  }
+  if (count > 9) {
+    fan.insertAdjacentHTML("beforeend", `<span class="fan-count">${count}</span>`)
+  }
+  return fan
+}
+
 function bankPile(player) {
   const wrap = document.createElement("div")
   wrap.className = "bank-pile"
@@ -301,17 +331,11 @@ function render() {
     const seat = document.createElement("div")
     seat.className = "seat" + (state.turn === p.id ? " active" : "")
     seat.dataset.playerId = p.id
-    const head = document.createElement("div")
-    head.className = "seat-head"
-    head.innerHTML = `<span class="seat-name">${escapeHtml(p.name)} ${p.connected ? "" : '<span class="offline">• offline</span>'}</span>`
-    const mini = document.createElement("div")
-    mini.className = "mini-hand"
-    for (let i = 0; i < Math.min(p.handCount, 10); i++) {
-      mini.insertAdjacentHTML("beforeend", `<div class="mini-card"></div>`)
-    }
-    head.appendChild(mini)
-    head.insertAdjacentHTML("beforeend", `<span class="seat-sets">${completedSetCount(p)}/3 sets</span>`)
-    seat.appendChild(head)
+    const top = document.createElement("div")
+    top.className = "seat-top"
+    top.appendChild(avatarEl(p))
+    top.appendChild(fanOfBacks(p.handCount))
+    seat.appendChild(top)
     const row = document.createElement("div")
     row.className = "table-row"
     row.appendChild(bankPile(p))
@@ -324,8 +348,13 @@ function render() {
   $("deck").classList.toggle("drawable", state.phase === "draw" && state.turn === myId)
   const slot = $("discard-slot")
   slot.innerHTML = ""
-  if (state.discardTop) slot.appendChild(cardFace(state.discardTop))
-  else slot.innerHTML = `<div class="placeholder"></div>`
+  if (state.discardTop) {
+    const top = cardFace(state.discardTop)
+    top.style.transform = `rotate(${(parseInt(state.discardTop.uid.slice(1), 10) * 37) % 22 - 11}deg)`
+    slot.appendChild(top)
+  } else {
+    slot.innerHTML = `<div class="placeholder"></div>`
+  }
 
   renderStatus()
   renderLog()
@@ -337,6 +366,9 @@ function render() {
   const my = me()
   table.appendChild(bankPile(my))
   table.appendChild(propArea(my, true))
+  const myAv = $("my-avatar")
+  myAv.innerHTML = ""
+  myAv.appendChild(avatarEl(my))
 
   const pips = $("plays-pips")
   pips.innerHTML = ""

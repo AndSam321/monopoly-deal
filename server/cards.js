@@ -30,10 +30,10 @@ const ACTIONS = {
   passgo: { name: "Pass Go", value: 1, count: 10, text: "Draw 2 extra cards" },
   forceddeal: { name: "Forced Deal", value: 3, count: 3, text: "Swap a property with any player" },
   slydeal: { name: "Sly Deal", value: 3, count: 3, text: "Steal a property (not from a full set)" },
-  debtcollector: { name: "Debt Collector", value: 3, count: 3, text: "One player pays you $5M" },
-  birthday: { name: "It's My Birthday!", value: 2, count: 3, text: "Everyone pays you $2M" },
-  house: { name: "House", value: 3, count: 3, text: "Add $3M rent to a full set" },
-  hotel: { name: "Hotel", value: 4, count: 2, text: "Add $4M rent to a set with a house" },
+  debtcollector: { name: "Debt Collector", value: 3, count: 3, text: "One player pays you $5MM" },
+  birthday: { name: "It's My Birthday!", value: 2, count: 3, text: "Everyone pays you $2MM" },
+  house: { name: "House", value: 3, count: 3, text: "Add $3MM rent to a full set" },
+  hotel: { name: "Hotel", value: 4, count: 2, text: "Add $4MM rent to a set with a house" },
   doublerent: { name: "Double the Rent", value: 1, count: 2, text: "Play with a rent card to double it" }
 }
 

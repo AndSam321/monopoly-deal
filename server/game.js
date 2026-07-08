@@ -174,7 +174,7 @@ class Game {
     player.bank.push(card)
     this.playsLeft--
     this.event({ type: "play", player: playerId, card, dest: "bank" })
-    this.addLog(`${player.name} banked $${card.value}M`)
+    this.addLog(`${player.name} banked $${card.value}MM`)
   }
 
   playProperty(playerId, uid, color) {
@@ -303,10 +303,10 @@ class Game {
     this.discardPile.push(card)
     this.playsLeft -= plays
     this.event({ type: "action", player: player.id, card })
-    this.addLog(`${player.name} charged $${amount}M ${COLORS[color].label} rent`)
+    this.addLog(`${player.name} charged $${amount}MM ${COLORS[color].label} rent`)
     this.openPending({
       action: "rent",
-      label: `$${amount}M ${COLORS[color].label} rent`,
+      label: `$${amount}MM ${COLORS[color].label} rent`,
       source: player,
       targetIds,
       amount
@@ -320,7 +320,7 @@ class Game {
     this.addLog(`${player.name} played ${card.name}`)
     this.openPending({
       action: card.kind,
-      label: card.kind === "birthday" ? `$${amount}M birthday money` : `$${amount}M debt`,
+      label: card.kind === "birthday" ? `$${amount}MM birthday money` : `$${amount}MM debt`,
       source: player,
       targetIds,
       amount
@@ -513,13 +513,13 @@ class Game {
     if (new Set(uids).size !== uids.length) throw new Error("Duplicate cards selected")
     const total = chosen.reduce((sum, c) => sum + c.value, 0)
     if (total < target.amount && chosen.length !== table.length) {
-      throw new Error(`Select at least $${target.amount}M, or everything you have`)
+      throw new Error(`Select at least $${target.amount}MM, or everything you have`)
     }
     const source = this.player(this.pending.source)
     this.transferCards(player, source, chosen)
     target.done = true
     this.event({ type: "payment", from: playerId, to: source.id, cards: chosen })
-    this.addLog(`${player.name} paid ${source.name} $${total}M`)
+    this.addLog(`${player.name} paid ${source.name} $${total}MM`)
     this.checkPendingDone()
     this.checkWin(source)
   }

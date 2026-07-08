@@ -764,7 +764,7 @@ function openCardMenu(card) {
           break
       }
     }
-    if (card.type !== "property" && card.type !== "wild") {
+    if (card.type !== "property" && card.type !== "wild" && card.type !== "money") {
       item(`🏦 Bank it as $${card.value}`, () => { act("play-bank", { uid: card.uid }, card.uid); closeModal() })
     }
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])

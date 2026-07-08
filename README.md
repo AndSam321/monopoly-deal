@@ -2,6 +2,8 @@
 
 Real-time multiplayer Monopoly Deal card game for 2-4 players.
 
+<img width="552" height="529" alt="Screenshot 2026-07-08 at 11 26 20 AM" src="https://github.com/user-attachments/assets/c414f529-e15e-453f-9f01-7b381edf29e9" />
+
 ## Run
 
 ```

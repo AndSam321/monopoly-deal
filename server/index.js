@@ -10,7 +10,7 @@ const app = express()
 app.use(express.static(path.join(__dirname, "..", "public")))
 
 const server = http.createServer(app)
-const io = new Server(server)
+const io = new Server(server, { pingInterval: 10000, pingTimeout: 8000 })
 
 const games = new Map()
 
@@ -70,6 +70,12 @@ io.on("connection", (socket) => {
     }
     socket.emit("joined", { code: game.code, playerId })
   }))
+
+  socket.on("sync", () => {
+    if (game && playerId) {
+      socket.emit("state", { ...game.stateFor(playerId), events: [] })
+    }
+  })
 
   socket.on("start-game", act(() => game.start(playerId)))
   socket.on("draw", act(() => game.turnDraw(playerId)))

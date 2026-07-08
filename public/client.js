@@ -91,10 +91,28 @@ socket.on("connect", () => {
   }
 })
 
+socket.on("disconnect", () => {
+  if (state) toast("Connection lost — reconnecting…")
+})
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return
+  if (socket.connected) socket.emit("sync")
+  else socket.connect()
+})
+
+setInterval(() => {
+  if (socket.connected && session && state) socket.emit("sync")
+}, 8000)
+
+let lastStateJson = null
+
 socket.on("game-error", (msg) => {
-  if (msg.includes("Room not found") && session && !state) {
+  if (msg.includes("Room not found") && session) {
     sessionStorage.removeItem("md-session")
     session = null
+    if (state) toast("The server restarted and the room ended — start a new game")
+    state = null
     show("screen-home")
     return
   }
@@ -102,6 +120,9 @@ socket.on("game-error", (msg) => {
 })
 
 socket.on("state", (s) => {
+  const json = JSON.stringify(s)
+  if (json === lastStateJson && !(s.events && s.events.length)) return
+  lastStateJson = json
   const prev = state
   state = s
   if (s.you) {

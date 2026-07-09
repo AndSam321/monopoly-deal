@@ -382,9 +382,13 @@ body {
 }
 
 .card-back::after {
-  content: "🎩";
-  font-size: 32px;
-  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.3));
+  content: "";
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fff url("monopoly-man.jpg") center / 88% no-repeat;
+  border: 2.5px solid rgba(168, 31, 31, 0.5);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), inset 0 0 0 2px rgba(247, 241, 225, 0.8);
 }
 
 #deck { cursor: default; transition: transform 0.15s ease; }
@@ -1149,7 +1153,6 @@ body {
   #center { gap: 10px; min-height: 96px; flex: 1 1 auto; }
   #log { display: none; }
   .card { width: 66px; height: 94px; }
-  .card-back::after { font-size: 20px; }
   #discard-slot .placeholder { width: 66px; height: 94px; }
   .seat { max-width: 96vw; }
   #opponents { flex-wrap: wrap; row-gap: 6px; }
@@ -1211,7 +1214,6 @@ body {
   #screen-game { gap: 2px; padding-top: max(4px, env(safe-area-inset-top)); }
   .card { width: 54px; height: 76px; }
   #discard-slot .placeholder { width: 54px; height: 76px; }
-  .card-back::after { font-size: 16px; }
   #center { min-height: 76px; gap: 10px; }
   #log { display: none; }
   #my-hand { height: 82px; }

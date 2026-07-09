@@ -206,6 +206,7 @@ socket.on("state", (s) => {
     const mine = s.players.find((p) => p.id === myId)
     if (mine) mine.hand = s.you.hand
   }
+  AudioFX.startMusic()
   if (s.phase === "lobby") {
     renderLobby()
     show("screen-lobby")
@@ -1114,42 +1115,94 @@ function pickBuildingSet(card) {
 
 /* ---------- Events & animation ---------- */
 
+const ACTION_SOUNDS = {
+  passgo: "arp",
+  birthday: "horn",
+  debtcollector: "coin",
+  slydeal: "whoosh",
+  forceddeal: "whoosh",
+  dealbreaker: "boom"
+}
+
 function runEvents(events, prev) {
   for (const e of events || []) {
     if (e.type === "draw") {
       if (!(e.player === myId && skipNextDrawAnim)) animateDraw(e)
       if (e.player === myId) skipNextDrawAnim = false
+      AudioFX.sfx.tick()
     }
     if (e.type === "play") {
       if (!(e.player === myId && e.card.uid === predictedUid)) animatePlay(e)
       if (e.player === myId) predictedUid = null
+      if (e.dest === "bank") AudioFX.sfx.coin()
+      else AudioFX.sfx.thock()
     }
     if (e.type === "action") {
       animatePlay({ ...e, dest: "discard" })
       const text = e.card.type === "rent" ? "RENT!" : BANNER_TEXT[e.card.kind]
       if (text) banner(`${nameOf(e.player)}: ${text}`)
+      const sound = e.card.type === "rent" ? "chaching" : ACTION_SOUNDS[e.card.kind]
+      if (sound) AudioFX.sfx[sound]()
       if (e.card.kind === "dealbreaker") stampFx(`<div class="fx-emoji">💥</div>`, true)
     }
     if (e.type === "jsn") {
       stampFx(`<div class="stop-sign"><span>NO!</span></div>`, true)
+      AudioFX.sfx.no()
     }
     if (e.type === "payment") {
       animateTransfer(e)
       floatMoney(e.to)
+      AudioFX.sfx.chaching()
     }
     if (e.type === "steal") {
       animateTransfer(e)
       streakFx(seatRect(e.from), seatRect(e.to))
+      AudioFX.sfx.whoosh()
     }
+    if (e.type === "turn" && e.player === myId) AudioFX.sfx.chime()
     if (e.type === "chat") {
       renderChat()
-      if (e.playerId !== myId) chatBubble(e.playerId, e.text)
+      if (e.playerId !== myId) {
+        chatBubble(e.playerId, e.text)
+        AudioFX.sfx.tick()
+      }
     }
     if (e.type === "win") {
       showWin()
+      AudioFX.sfx.fanfare()
     }
   }
 }
+
+/* ---------- Sound controls ---------- */
+
+$("audio-btn").addEventListener("click", () => {
+  $("audio-pop").classList.toggle("hidden")
+})
+
+$("music-vol").value = AudioFX.settings.music
+$("sfx-vol").value = AudioFX.settings.sfx
+
+$("music-vol").addEventListener("input", (e) => {
+  AudioFX.setMusic(Number(e.target.value))
+})
+
+$("sfx-vol").addEventListener("input", (e) => {
+  AudioFX.setSfx(Number(e.target.value))
+  AudioFX.sfx.coin()
+})
+
+$("mute-btn").addEventListener("click", () => {
+  AudioFX.toggleMute()
+  updateAudioBtn()
+})
+
+function updateAudioBtn() {
+  $("audio-btn").textContent = AudioFX.settings.muted ? "🔇" : "🔊"
+  $("mute-btn").textContent = AudioFX.settings.muted ? "Unmute" : "Mute all"
+}
+
+updateAudioBtn()
 
 function fxLayer() {
   let layer = $("fx-layer")

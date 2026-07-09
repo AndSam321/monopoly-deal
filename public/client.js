@@ -253,8 +253,15 @@ function cardFace(card, cls = "card") {
       el.innerHTML = `<div class="bar rainbow">WILD</div><div class="wild-note">Use as any color property</div>`
     } else {
       const [a, b] = card.colors
+      const half = (c) => {
+        const info = COLORS[c]
+        return `<div class="wild-half">
+          <div class="wh-bar" style="background:${info.hex}">${info.label}</div>
+          <div class="wh-rents">${info.rent.map((r, i) => `<span>${i + 1}·$${r}</span>`).join("")}<span class="wh-set">set&nbsp;${info.size}</span></div>
+        </div>`
+      }
       el.innerHTML = `<div class="bar split"><div style="background:${COLORS[a].hex}"></div><div style="background:${COLORS[b].hex}"></div></div>
-        <div class="wild-note">${COLORS[a].label} or ${COLORS[b].label}</div>
+        ${half(a)}${half(b)}
         <span class="corner-value">$${card.value}</span>`
     }
   } else if (card.type === "rent") {
@@ -716,9 +723,7 @@ function buildPaymentModal(key, target) {
     modal.innerHTML = `<h2>Pay ${escapeHtml(nameOf(state.pending.source))} $${target.amount}</h2>
       <p>${escapeHtml(state.pending.label)} — pick cards from your bank and properties. No change given!</p>
       <div class="pay-total"></div>`
-    const grid = document.createElement("div")
-    grid.className = "modal-cards"
-    for (const card of tableCards) {
+    modal.appendChild(groupedCardGrid(cardSections(my, true), (card) => {
       const el = cardFace(card)
       if (selected.has(card.uid)) el.classList.add("selected")
       el.addEventListener("click", () => {
@@ -727,9 +732,8 @@ function buildPaymentModal(key, target) {
         el.classList.toggle("selected")
         update()
       })
-      grid.appendChild(el)
-    }
-    modal.appendChild(grid)
+      return el
+    }))
     const actions = modalActions(modal, [
       { label: "Pay", onClick: () => act("pay", { uids: [...selected] }) }
     ])
@@ -801,6 +805,41 @@ function buildDiscardModal(key) {
 }
 
 /* ---------- Playing cards ---------- */
+
+function cardSections(player, includeBank) {
+  const sections = []
+  if (includeBank && player.bank.length) {
+    sections.push({ label: "Bank", hex: "#b8862e", cards: [...player.bank] })
+  }
+  for (const [color, pile] of Object.entries(player.props)) {
+    const cards = [...pile.cards, ...(includeBank ? pile.buildings : [])]
+    if (!cards.length) continue
+    const info = COLORS[color]
+    sections.push({
+      label: `${info.label} ${pile.cards.length}/${info.size}${pile.cards.length >= info.size ? " ✓" : ""}`,
+      hex: info.hex,
+      color,
+      cards
+    })
+  }
+  return sections
+}
+
+function groupedCardGrid(sections, buildCardEl) {
+  const wrap = document.createElement("div")
+  wrap.className = "grouped-cards"
+  for (const section of sections) {
+    const group = document.createElement("div")
+    group.className = "card-group"
+    group.innerHTML = `<div class="group-head"><span class="group-swatch" style="background:${section.hex}"></span>${escapeHtml(section.label)}</div>`
+    const row = document.createElement("div")
+    row.className = "group-cards"
+    for (const card of section.cards) row.appendChild(buildCardEl(card, section))
+    group.appendChild(row)
+    wrap.appendChild(group)
+  }
+  return wrap
+}
 
 function bigCard(card) {
   const wrap = document.createElement("div")
@@ -946,7 +985,8 @@ function pickWildColor(card) {
 function openWildFlip(card) {
   const colors = (card.colors === "any" ? Object.keys(COLORS) : card.colors).filter((c) => c !== card.assignedColor)
   openModal(`flip-${card.uid}`, (modal) => {
-    modal.innerHTML = `<h2>Move wildcard to…</h2><p>Free — doesn't use a play.</p>`
+    modal.appendChild(bigCard(card))
+    modal.insertAdjacentHTML("beforeend", `<h2>Move wildcard to…</h2><p>Free — doesn't use a play.</p>`)
     colorGrid(modal, colors, (color) => {
       act("flip-wild", { uid: card.uid, color })
       closeModal()
@@ -1030,10 +1070,8 @@ function pickOpponentCard(actionCard, isSwap) {
     if (!all.length) return toast(`${target.name} has no properties yet`)
     if (!stealable.size) return toast("All their properties are locked in complete sets")
     openModal(`steal-${actionCard.uid}`, (modal) => {
-      modal.innerHTML = `<h2>Take which property?</h2><p>Cards in complete sets can't be taken.</p>`
-      const grid = document.createElement("div")
-      grid.className = "modal-cards"
-      for (const card of all) {
+      modal.innerHTML = `<h2>Take which property?</h2><p>${escapeHtml(target.name)}'s table, set by set — complete sets are protected.</p>`
+      modal.appendChild(groupedCardGrid(cardSections(target, false), (card) => {
         const el = cardFace(card)
         if (!stealable.has(card.uid)) el.classList.add("dimmed")
         else el.addEventListener("click", () => {
@@ -1043,9 +1081,8 @@ function pickOpponentCard(actionCard, isSwap) {
             closeModal()
           }
         })
-        grid.appendChild(el)
-      }
-      modal.appendChild(grid)
+        return el
+      }))
       modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
     })
   })
@@ -1055,18 +1092,15 @@ function pickMyCardForSwap(actionCard, targetId, theirUid) {
   const mine = Object.values(me().props).flatMap((pile) => pile.cards)
   if (!mine.length) return toast("You need a property to trade away")
   openModal(`swap-${actionCard.uid}`, (modal) => {
-    modal.innerHTML = `<h2>Give which of yours?</h2>`
-    const grid = document.createElement("div")
-    grid.className = "modal-cards"
-    for (const card of mine) {
+    modal.innerHTML = `<h2>Give which of yours?</h2><p>Your table, set by set.</p>`
+    modal.appendChild(groupedCardGrid(cardSections(me(), false), (card) => {
       const el = cardFace(card)
       el.addEventListener("click", () => {
         act("play-action", { uid: actionCard.uid, opts: { targetId, cardUid: theirUid, myCardUid: card.uid } }, actionCard.uid)
         closeModal()
       })
-      grid.appendChild(el)
-    }
-    modal.appendChild(grid)
+      return el
+    }))
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
   })
 }

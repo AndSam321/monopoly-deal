@@ -470,6 +470,13 @@ function render() {
   myAv.innerHTML = ""
   myAv.appendChild(avatarEl(my))
 
+  const pips = $("plays-pips")
+  pips.innerHTML = ""
+  if (state.turn === myId && state.phase === "play") {
+    for (let i = 0; i < 3; i++) {
+      pips.insertAdjacentHTML("beforeend", `<div class="pip${i < state.playsLeft ? " on" : ""}"></div>`)
+    }
+  }
   $("end-turn-btn").classList.toggle("hidden", !(state.turn === myId && state.phase === "play" && !state.pending))
 
   renderHand()

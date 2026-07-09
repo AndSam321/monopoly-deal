@@ -462,8 +462,25 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 16px;
   min-height: 56px;
   margin-bottom: 8px;
+}
+
+#plays-pips { display: flex; gap: 6px; }
+
+.pip {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(247, 241, 225, 0.2);
+  transition: background 0.25s ease, transform 0.25s ease;
+}
+
+.pip.on {
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(233, 182, 75, 0.7);
+  transform: scale(1.1);
 }
 
 #end-turn-btn {

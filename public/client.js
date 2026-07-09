@@ -310,7 +310,7 @@ function smallPropCard(card) {
   } else if (card.type === "action") {
     el.innerHTML = `<div class="pbar" style="background:#3a3a3a"></div><div class="pname">${ACTION_ICONS[card.kind]} ${card.name}</div>`
   } else {
-    el.innerHTML = `<div class="pbar" style="background:${COLORS[card.color].hex}"></div><div class="pname">${card.name}</div>`
+    el.innerHTML = `<div class="pbar" style="background:${COLORS[card.color].hex}"></div><div class="pimg"></div>`
   }
   return el
 }

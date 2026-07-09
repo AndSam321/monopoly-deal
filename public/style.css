@@ -328,6 +328,17 @@ body {
   line-height: 1.2;
 }
 
+.pcard .pimg {
+  position: absolute;
+  top: 16px;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  background: url("house.jpg") center / contain no-repeat;
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+}
+
 .pcard.wild-any .pbar { background: linear-gradient(90deg, #d63f9d, #f28b1f, #f0c22e, #1f9e53, #2d5bd1); }
 
 .pcard.clickable:hover { transform: translateY(-4px) scale(1.06); cursor: pointer; }
@@ -1280,6 +1291,7 @@ body {
   .pcard { width: 36px; height: 50px; }
   .pcard .pbar { height: 11px; }
   .pcard .pname { font-size: 5.5px; }
+  .pcard .pimg { top: 13px; }
   .prop-stack .pcard { margin-top: -29px; }
   .chip { width: 25px; height: 25px; font-size: 10px; }
   .bank-pile { min-width: 42px; }

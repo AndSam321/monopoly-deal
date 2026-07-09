@@ -2,9 +2,13 @@ const AudioFX = (() => {
   let ctx = null
   let master = null
   let sfxBus = null
-  let musicEl = null
+  let musicBus = null
+  let musicBuffer = null
+  let musicLoading = false
+  let musicStarted = false
   let musicWanted = false
   let noiseBuffer = null
+  const CROSSFADE = 2.5
 
   const settings = Object.assign(
     { music: 35, sfx: 70, muted: false },
@@ -22,6 +26,8 @@ const AudioFX = (() => {
       ctx = new AC()
       master = ctx.createGain()
       master.connect(ctx.destination)
+      musicBus = ctx.createGain()
+      musicBus.connect(master)
       sfxBus = ctx.createGain()
       sfxBus.connect(master)
       apply()
@@ -30,8 +36,8 @@ const AudioFX = (() => {
   }
 
   function apply() {
-    if (musicEl) musicEl.volume = settings.muted ? 0 : settings.music / 100
     if (!ctx) return
+    musicBus.gain.value = (settings.music / 100) * 0.9
     sfxBus.gain.value = (settings.sfx / 100) * 0.9
     master.gain.value = settings.muted ? 0 : 1
   }
@@ -48,24 +54,51 @@ const AudioFX = (() => {
     if (attempt) attempt.catch(() => { mediaKick = null })
   }
 
+  function loadMusic() {
+    if (musicBuffer || musicLoading) return Promise.resolve()
+    musicLoading = true
+    return fetch("lounge.m4a")
+      .then((res) => res.arrayBuffer())
+      .then((arr) => ctx.decodeAudioData(arr))
+      .then((buffer) => { musicBuffer = buffer })
+      .catch(() => {})
+      .finally(() => { musicLoading = false })
+  }
+
+  function scheduleMusicAt(t) {
+    const src = ctx.createBufferSource()
+    src.buffer = musicBuffer
+    const fade = ctx.createGain()
+    src.connect(fade)
+    fade.connect(musicBus)
+    const dur = musicBuffer.duration
+    fade.gain.setValueAtTime(0.0001, t)
+    fade.gain.linearRampToValueAtTime(1, t + CROSSFADE)
+    fade.gain.setValueAtTime(1, t + dur - CROSSFADE)
+    fade.gain.linearRampToValueAtTime(0.0001, t + dur)
+    src.start(t)
+    src.stop(t + dur + 0.1)
+    const nextStart = t + dur - CROSSFADE
+    const wakeIn = Math.max(0, (nextStart - ctx.currentTime - 4) * 1000)
+    setTimeout(() => {
+      if (ctx.state === "running") scheduleMusicAt(Math.max(nextStart, ctx.currentTime + 0.05))
+    }, wakeIn)
+  }
+
   function maybeStartMusic() {
-    if (!musicWanted) return
-    if (!musicEl) {
-      musicEl = new Audio("lounge.m4a")
-      musicEl.loop = true
-      musicEl.preload = "auto"
+    if (!musicWanted || !ctx || ctx.state !== "running" || musicStarted) return
+    if (!musicBuffer) {
+      loadMusic().then(maybeStartMusic)
+      return
     }
-    apply()
-    if (musicEl.paused) {
-      const attempt = musicEl.play()
-      if (attempt) attempt.catch(() => {})
-    }
+    musicStarted = true
+    scheduleMusicAt(ctx.currentTime + 0.05)
   }
 
   function unlock() {
     if (!ensure()) return
     kickMediaSession()
-    if (ctx.state === "suspended") ctx.resume().catch(() => {})
+    if (ctx.state === "suspended") ctx.resume().then(maybeStartMusic).catch(() => {})
     maybeStartMusic()
   }
 
@@ -193,8 +226,8 @@ const AudioFX = (() => {
       return {
         ctxState: ctx ? ctx.state : "no-context",
         musicWanted,
-        musicPlaying: !!(musicEl && !musicEl.paused),
-        musicVolume: musicEl ? musicEl.volume : null,
+        musicPlaying: musicStarted,
+        musicVolume: musicBus ? musicBus.gain.value : null,
         masterGain: master ? master.gain.value : null
       }
     },

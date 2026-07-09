@@ -63,15 +63,42 @@ function act(event, payload = {}, uid = null) {
   }, 2500)
 }
 
+let predictedUid = null
+
+function predictPlay(card, dest, color) {
+  const my = me()
+  const idx = my.hand.findIndex((c) => c.uid === card.uid)
+  if (idx < 0) return
+  my.hand.splice(idx, 1)
+  if (dest === "bank") {
+    my.bank.push(card)
+  } else {
+    const col = color || card.color
+    if (!my.props[col]) my.props[col] = { cards: [], buildings: [] }
+    my.props[col].cards.push({ ...card, assignedColor: col })
+  }
+  state.playsLeft = Math.max(0, state.playsLeft - 1)
+  predictedUid = card.uid
+  render()
+}
+
 let state = null
 let myId = null
-let session = JSON.parse(sessionStorage.getItem("md-session") || "null")
+let session = JSON.parse(sessionStorage.getItem("md-session") || localStorage.getItem("md-session") || "null")
 let openModalKey = null
 let logCount = 0
 
 function saveSession(code, playerId, name) {
   session = { code, playerId, name }
-  sessionStorage.setItem("md-session", JSON.stringify(session))
+  const json = JSON.stringify(session)
+  sessionStorage.setItem("md-session", json)
+  localStorage.setItem("md-session", json)
+}
+
+function clearSession() {
+  session = null
+  sessionStorage.removeItem("md-session")
+  localStorage.removeItem("md-session")
 }
 
 function show(screen) {
@@ -134,14 +161,30 @@ setInterval(() => {
   if (socket.connected && session && state) socket.emit("sync")
 }, 8000)
 
+setInterval(() => {
+  if (!socket.connected || !state) return
+  const start = Date.now()
+  socket.timeout(3000).emit("latency-ping", null, (err) => {
+    const dot = $("ping-dot")
+    if (!dot) return
+    if (err) {
+      dot.dataset.level = "bad"
+      dot.title = "No response from server"
+      return
+    }
+    const ms = Date.now() - start
+    dot.dataset.level = ms < 200 ? "good" : ms < 600 ? "ok" : "bad"
+    dot.title = `${ms}ms · ${socket.io.engine.transport.name}`
+  })
+}, 5000)
+
 let lastStateJson = null
 
 socket.on("game-error", (msg) => {
   pendingAction = false
   hiddenUid = null
   if (msg.includes("Room not found") && session) {
-    sessionStorage.removeItem("md-session")
-    session = null
+    clearSession()
     if (state) toast("The server restarted and the room ended — start a new game")
     state = null
     show("screen-home")
@@ -200,7 +243,7 @@ function cardFace(card, cls = "card") {
   } else if (card.type === "property") {
     const c = COLORS[card.color]
     el.classList.add("face-prop")
-    el.innerHTML = `<div class="bar" style="background:${c.hex}">${propIcon(card)}${card.name}</div>
+    el.innerHTML = `<div class="bar${card.name.length > 14 ? " long" : ""}" style="background:${c.hex}">${propIcon(card)}${card.name}</div>
       <div class="rents">${c.rent.map((r, i) => `<div><span>${i + 1} card${i ? "s" : ""}</span><span>$${r}</span></div>`).join("")}</div>
       <span class="corner-value">$${card.value}</span>`
   } else if (card.type === "wild") {
@@ -218,7 +261,7 @@ function cardFace(card, cls = "card") {
     const circle = card.colors === "any"
       ? `<div class="rent-circle rainbow"></div>`
       : `<div class="rent-circle"><div style="background:${COLORS[card.colors[0]].hex}"></div><div style="background:${COLORS[card.colors[1]].hex}"></div></div>`
-    const text = card.colors === "any" ? "Charge one player rent on any of your colors" : `${COLORS[card.colors[0]].label} or ${COLORS[card.colors[1]].label}`
+    const text = card.colors === "any" ? "Charge one player rent on any color" : `${COLORS[card.colors[0]].label} or ${COLORS[card.colors[1]].label}`
     el.innerHTML = `${circle}<div class="r-name">RENT</div><div class="a-text">${text}</div><span class="corner-value">$${card.value}</span>`
   } else {
     el.classList.add("face-action")
@@ -788,10 +831,10 @@ function openCardMenu(card) {
     }
 
     if (card.type === "money") {
-      item(`💰 Add $${card.value} to your bank`, () => { act("play-bank", { uid: card.uid }, card.uid); closeModal() })
+      item(`💰 Add $${card.value} to your bank`, () => { predictPlay(card, "bank"); act("play-bank", { uid: card.uid }); closeModal() })
     }
     if (card.type === "property") {
-      item(`🏠 Play ${escapeHtml(card.name)}`, () => { act("play-property", { uid: card.uid }, card.uid); closeModal() })
+      item(`🏠 Play ${escapeHtml(card.name)}`, () => { predictPlay(card, "props"); act("play-property", { uid: card.uid }); closeModal() })
     }
     if (card.type === "wild") {
       item("🌈 Play as a property…", () => pickWildColor(card))
@@ -835,7 +878,7 @@ function openCardMenu(card) {
       }
     }
     if (card.type !== "property" && card.type !== "wild" && card.type !== "money") {
-      item(`🏦 Bank it as $${card.value}`, () => { act("play-bank", { uid: card.uid }, card.uid); closeModal() })
+      item(`🏦 Bank it as $${card.value}`, () => { predictPlay(card, "bank"); act("play-bank", { uid: card.uid }); closeModal() })
     }
     modalActions(modal, [{ label: "Cancel", cls: "btn-ghost", onClick: closeModal }])
   })
@@ -891,7 +934,8 @@ function pickWildColor(card) {
   openModal(`wild-${card.uid}`, (modal) => {
     modal.innerHTML = `<h2>Play wildcard as…</h2>${note}`
     colorGrid(modal, colors, (color) => {
-      act("play-property", { uid: card.uid, color }, card.uid)
+      predictPlay(card, "props", color)
+      act("play-property", { uid: card.uid, color })
       closeModal()
     }, (c) => ownedLabel(my, c))
     modalActions(modal, [{ label: "Back", cls: "btn-ghost", onClick: () => openCardMenu(card) }])
@@ -1077,7 +1121,8 @@ function runEvents(events, prev) {
       if (e.player === myId) skipNextDrawAnim = false
     }
     if (e.type === "play") {
-      animatePlay(e)
+      if (!(e.player === myId && e.card.uid === predictedUid)) animatePlay(e)
+      if (e.player === myId) predictedUid = null
     }
     if (e.type === "action") {
       animatePlay({ ...e, dest: "discard" })
@@ -1339,7 +1384,7 @@ function showWin() {
   again.style.width = "auto"
   again.textContent = "Back to home"
   again.addEventListener("click", () => {
-    sessionStorage.removeItem("md-session")
+    clearSession()
     location.reload()
   })
   splash.appendChild(again)

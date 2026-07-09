@@ -65,7 +65,9 @@ io.on("connection", (socket) => {
     const found = games.get(String(code || "").toUpperCase().trim())
     if (!found) throw new Error("Room not found — check the code")
     game = found
-    const existing = token && game.players.find((p) => p.id === token)
+    const cleanName = String(name || "").trim().toLowerCase()
+    const existing = (token && game.players.find((p) => p.id === token)) ||
+      (game.phase !== "lobby" && game.players.find((p) => !p.connected && p.name.toLowerCase() === cleanName))
     if (existing) {
       existing.socketId = socket.id
       existing.connected = true
@@ -77,6 +79,10 @@ io.on("connection", (socket) => {
     }
     socket.emit("joined", { code: game.code, playerId })
   }))
+
+  socket.on("latency-ping", (_, ack) => {
+    if (typeof ack === "function") ack()
+  })
 
   socket.on("sync", () => {
     if (game && playerId) {

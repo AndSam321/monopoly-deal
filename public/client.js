@@ -331,9 +331,11 @@ function propArea(player, mine) {
     stack.className = "prop-stack"
     for (const card of pile.cards) {
       const el = smallPropCard(card)
+      el.classList.add("clickable")
       if (myTurnFree && card.type === "wild") {
-        el.classList.add("clickable")
         el.addEventListener("click", () => openWildFlip(card))
+      } else {
+        el.addEventListener("click", () => openCardPreview(card))
       }
       stack.appendChild(el)
     }
@@ -347,7 +349,13 @@ function propArea(player, mine) {
     if (pile.buildings.length) {
       const b = document.createElement("div")
       b.className = "bldg-badge"
-      b.textContent = pile.buildings.map((c) => (c.kind === "house" ? "🏠" : "🏨")).join(" ")
+      for (const building of pile.buildings) {
+        const span = document.createElement("span")
+        span.textContent = building.kind === "house" ? "🏠" : "🏨"
+        span.style.cursor = "pointer"
+        span.addEventListener("click", () => openCardPreview(building))
+        b.appendChild(span)
+      }
       pileEl.appendChild(b)
     }
     area.appendChild(pileEl)
@@ -390,6 +398,8 @@ function render() {
   if (state.discardTop) {
     const top = cardFace(state.discardTop)
     top.style.transform = `rotate(${(parseInt(state.discardTop.uid.slice(1), 10) * 37) % 22 - 11}deg)`
+    top.style.cursor = "pointer"
+    top.addEventListener("click", () => openCardPreview(state.discardTop))
     slot.appendChild(top)
   } else {
     slot.innerHTML = `<div class="placeholder"></div>`
@@ -418,8 +428,27 @@ function render() {
 
   renderHand()
   renderChat()
+  fitMyTable()
   syncModals()
 }
+
+function fitMyTable() {
+  const table = $("my-table")
+  table.style.transform = ""
+  table.style.height = ""
+  const cap = window.matchMedia("(max-width: 700px)").matches ? 116 : 150
+  const h = table.scrollHeight
+  if (h > cap) {
+    const scale = cap / h
+    table.style.transform = `scale(${scale})`
+    table.style.transformOrigin = "top center"
+    table.style.height = `${cap}px`
+  }
+}
+
+window.addEventListener("resize", () => {
+  if (state && state.phase !== "lobby") fitMyTable()
+})
 
 function renderHand() {
   const hand = $("my-hand")
@@ -436,9 +465,10 @@ function renderHand() {
     const el = cardFace(card, "card hand-card")
     el.dataset.uid = card.uid
     const mid = (n - 1) / 2
+    const arc = n > 8 ? 4 : 5
     el.style.margin = `0 ${-overlap / 2}px`
     el.style.setProperty("--fan-rot", `${(i - mid) * (n > 8 ? 3 : 4)}deg`)
-    el.style.setProperty("--fan-y", `${Math.abs(i - mid) * (n > 8 ? 4 : 5)}px`)
+    el.style.setProperty("--fan-y", `${Math.abs(i - mid) * arc - mid * arc}px`)
     el.style.zIndex = i
     el.dataset.z = i
     if (canPlay) {
@@ -549,9 +579,16 @@ function openModal(key, build) {
   $("modal-overlay").classList.remove("hidden")
 }
 
+let closingModal = false
+
 function closeModal() {
   openModalKey = null
   $("modal-overlay").classList.add("hidden")
+  if (!closingModal && state && state.phase !== "lobby") {
+    closingModal = true
+    syncModals()
+    closingModal = false
+  }
 }
 
 function modalActions(modal, buttons) {

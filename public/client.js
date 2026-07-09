@@ -325,11 +325,11 @@ const TOKENS = ["🎩", "🐕", "🚗", "👢", "🚢", "🐈"]
 function avatarEl(player) {
   const idx = state.players.findIndex((p) => p.id === player.id)
   const av = document.createElement("div")
-  av.className = "avatar" + (state.turn === player.id && !state.winner ? " glow" : "")
+  av.className = "avatar" + (state.turn === player.id && !state.winner ? " glow" : "") + (player.connected ? "" : " offline")
   av.innerHTML = `<div class="token">${TOKENS[idx % TOKENS.length]}</div>
     <div class="av-name">${escapeHtml(player.name)}</div>
     <div class="av-sets">${completedSetCount(player)}/3</div>
-    ${player.connected ? "" : '<div class="av-off">!</div>'}`
+    ${player.connected ? "" : '<div class="av-off" title="Reconnecting…">…</div>'}`
   return av
 }
 

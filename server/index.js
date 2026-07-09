@@ -105,7 +105,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     if (!game || !playerId) return
     const player = game.players.find((p) => p.id === playerId)
-    if (player) {
+    if (player && player.socketId === socket.id) {
       player.connected = false
       player.socketId = null
       broadcast(game)

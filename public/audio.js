@@ -1,12 +1,10 @@
 const AudioFX = (() => {
   let ctx = null
   let master = null
-  let musicBus = null
   let sfxBus = null
-  let musicTimer = null
+  let musicEl = null
   let musicWanted = false
   let noiseBuffer = null
-  let bar = 0
 
   const settings = Object.assign(
     { music: 35, sfx: 70, muted: false },
@@ -24,8 +22,6 @@ const AudioFX = (() => {
       ctx = new AC()
       master = ctx.createGain()
       master.connect(ctx.destination)
-      musicBus = ctx.createGain()
-      musicBus.connect(master)
       sfxBus = ctx.createGain()
       sfxBus.connect(master)
       apply()
@@ -34,8 +30,8 @@ const AudioFX = (() => {
   }
 
   function apply() {
+    if (musicEl) musicEl.volume = settings.muted ? 0 : settings.music / 100
     if (!ctx) return
-    musicBus.gain.value = (settings.music / 100) * 0.8
     sfxBus.gain.value = (settings.sfx / 100) * 0.9
     master.gain.value = settings.muted ? 0 : 1
   }
@@ -52,17 +48,25 @@ const AudioFX = (() => {
     if (attempt) attempt.catch(() => { mediaKick = null })
   }
 
-  function maybeStartLoop() {
-    if (musicWanted && !musicTimer && ctx && ctx.state === "running") beginLoop()
+  function maybeStartMusic() {
+    if (!musicWanted) return
+    if (!musicEl) {
+      musicEl = new Audio("lounge.m4a")
+      musicEl.loop = true
+      musicEl.preload = "auto"
+    }
+    apply()
+    if (musicEl.paused) {
+      const attempt = musicEl.play()
+      if (attempt) attempt.catch(() => {})
+    }
   }
 
   function unlock() {
     if (!ensure()) return
     kickMediaSession()
-    if (ctx.state === "suspended") {
-      ctx.resume().then(maybeStartLoop).catch(() => {})
-    }
-    maybeStartLoop()
+    if (ctx.state === "suspended") ctx.resume().catch(() => {})
+    maybeStartMusic()
   }
 
   document.addEventListener("pointerdown", unlock)
@@ -107,31 +111,6 @@ const AudioFX = (() => {
     src.stop(t + dur + 0.05)
   }
 
-  const CHORDS = [
-    [130.81, 164.81, 196.0, 246.94],
-    [110.0, 130.81, 164.81, 196.0],
-    [87.31, 110.0, 130.81, 164.81],
-    [98.0, 123.47, 146.83, 174.61]
-  ]
-  const PENTATONIC = [523.25, 587.33, 659.25, 783.99, 880.0]
-  const BAR_SECONDS = 3.6
-
-  function beginLoop() {
-    const step = () => {
-      if (ctx.state !== "running") return
-      const t = ctx.currentTime + 0.15
-      const chord = CHORDS[bar % CHORDS.length]
-      for (const f of chord) tone(musicBus, "triangle", f, t, 1.5, 0.09, BAR_SECONDS)
-      tone(musicBus, "sine", chord[0] / 2, t, 0.5, 0.15, BAR_SECONDS)
-      if (bar % 2 === 1) {
-        const note = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)]
-        tone(musicBus, "sine", note, t + 0.8 + Math.random() * 1.4, 0.02, 0.08, 1.8)
-      }
-      bar++
-    }
-    step()
-    musicTimer = setInterval(step, BAR_SECONDS * 1000)
-  }
 
   function ready() {
     return ctx && ctx.state === "running" && !settings.muted
@@ -214,8 +193,8 @@ const AudioFX = (() => {
       return {
         ctxState: ctx ? ctx.state : "no-context",
         musicWanted,
-        loopRunning: !!musicTimer,
-        musicGain: musicBus ? musicBus.gain.value : null,
+        musicPlaying: !!(musicEl && !musicEl.paused),
+        musicVolume: musicEl ? musicEl.volume : null,
         masterGain: master ? master.gain.value : null
       }
     },
